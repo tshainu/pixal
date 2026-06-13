@@ -604,6 +604,7 @@ export default {
       if (status) { conditions.push(`s.payment_status = ?`); binds.push(status); }
       if (url.searchParams.get('exclude_ordered') === '1') {
         conditions.push(`s.id NOT IN (SELECT sale_id FROM orders WHERE sale_id IS NOT NULL)`);
+        conditions.push(`s.payment_status != 'Draft'`);
       }
       const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
       const rows = await env.pandora_db.prepare(`
