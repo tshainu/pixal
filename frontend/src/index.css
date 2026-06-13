@@ -405,6 +405,7 @@ tr:hover td { background: #FAFAFA; }
   margin-bottom: 6px;
 }
 .ps-names-table { font-size: 8.5pt; }
+.ps-names-table th, .ps-names-table td { border: 1px solid #333 !important; }
 .ps-names-table td { padding: 3px 6px; text-align: center; }
 .ps-name-idx { color: #888; font-size: 7.5pt; }
 .ps-name-name { font-weight: 700; color: #111; text-align: left !important; }
@@ -696,6 +697,7 @@ tr:hover td { background: #FAFAFA; }
   .ps-names-block { margin-top: 14px; }
   .ps-names-title { font-size: 11pt; font-weight: 800; color: #111; margin-bottom: 6px; }
   .ps-names-table { font-size: 8.5pt; }
+  .ps-names-table th, .ps-names-table td { border: 1px solid #333 !important; }
   .ps-names-table td { padding: 3px 6px; text-align: center; }
   .ps-name-idx { color: #888; font-size: 7.5pt; }
   .ps-name-name { font-weight: 700; color: #111; text-align: left !important; }
