@@ -1948,7 +1948,7 @@ function SheetsSection({ orders, isLoading, search, setSearch, statusFilter, set
       <div className="filter-bar">
         <div style={{ position: 'relative' }}>
           <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
-          <input className="form-control" style={{ paddingLeft: 32, width: 260 }} placeholder="Search order sheets…" value={search} onChange={e => setSearch(e.target.value)} />
+          <input className="form-control" style={{ paddingLeft: 32, width: 260 }} placeholder="Search by order no. or invoice no…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <select className="form-control" style={{ width: 160 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="">All Status</option>
