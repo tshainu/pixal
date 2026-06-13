@@ -2410,14 +2410,40 @@ function ViewModal({ order, onClose, onEdit, onStatusChange, onDelete }: {
 
             {/* Garment specs parsed from notes */}
             {(nd.collar_type || nd.sleeve_type || nd.button_type || nd.tag_name) && (
-              <div style={{ marginBottom: 14, padding: '10px 14px', background: '#FAFAFA', borderRadius: 8, border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 600, marginBottom: 8, color: 'var(--text2)' }}>Garment Specs</div>
-                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-                  {nd.collar_type && <Field label="Collar" value={`${nd.collar_type}${nd.collar_colour ? ' — ' + nd.collar_colour : ''}`} />}
-                  {nd.sleeve_type && <Field label="Sleeve" value={nd.sleeve_type} />}
-                  {nd.button_type && <Field label="Button" value={nd.button_type} />}
-                  {nd.tag_name && <Field label="Tag" value={nd.tag_name} />}
-                  <Field label="Open Front" value={nd.open ? 'Yes' : 'No'} />
+              <div style={{ marginBottom: 16, padding: '14px 16px', background: 'linear-gradient(135deg, #fff8f0 0%, #fff0f5 100%)', borderRadius: 12, border: '1.5px solid #ffd6e0', boxShadow: '0 2px 8px rgba(220,38,100,0.07)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
+                  <span style={{ fontSize: '1rem' }}>🧵</span>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#c2185b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Garment Specs</span>
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {nd.collar_type && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', background: '#fff', border: '1.5px solid #f8bbd0', borderRadius: 10, padding: '6px 14px', minWidth: 80 }}>
+                      <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#e91e8c', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Collar</span>
+                      <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1a2e' }}>{nd.collar_type}{nd.collar_colour ? <span style={{ color: '#e91e8c', fontWeight: 500 }}> — {nd.collar_colour}</span> : ''}</span>
+                    </div>
+                  )}
+                  {nd.sleeve_type && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', background: '#fff', border: '1.5px solid #bbdefb', borderRadius: 10, padding: '6px 14px', minWidth: 80 }}>
+                      <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#1565c0', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Sleeve</span>
+                      <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1a2e' }}>{nd.sleeve_type}</span>
+                    </div>
+                  )}
+                  {nd.button_type && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', background: '#fff', border: '1.5px solid #c8e6c9', borderRadius: 10, padding: '6px 14px', minWidth: 80 }}>
+                      <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#2e7d32', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Button</span>
+                      <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1a2e' }}>{nd.button_type}</span>
+                    </div>
+                  )}
+                  {nd.tag_name && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', background: '#fff', border: '1.5px solid #ffe0b2', borderRadius: 10, padding: '6px 14px', minWidth: 80 }}>
+                      <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#e65100', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Tag</span>
+                      <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1a2e' }}>{nd.tag_name}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', background: nd.open ? '#e8f5e9' : '#fff', border: `1.5px solid ${nd.open ? '#a5d6a7' : '#e0e0e0'}`, borderRadius: 10, padding: '6px 14px', minWidth: 80 }}>
+                    <span style={{ fontSize: '0.62rem', fontWeight: 700, color: nd.open ? '#2e7d32' : '#757575', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Open Front</span>
+                    <span style={{ fontSize: '0.88rem', fontWeight: 700, color: nd.open ? '#1b5e20' : '#9e9e9e' }}>{nd.open ? '✓ Yes' : 'No'}</span>
+                  </div>
                 </div>
               </div>
             )}
