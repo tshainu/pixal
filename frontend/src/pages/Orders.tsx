@@ -2384,10 +2384,7 @@ function ViewModal({ order, onClose, onEdit, onStatusChange, onDelete }: {
             </div>
           </div>
         </div>
-        {/* Print-only header (kept minimal for print path) */}
-        <div className="modal-header print-only" style={{ display: 'none' }}>
-          <h3>{order.order_no}</h3>
-        </div>
+
         <div className="modal-body">
           {/* Screen view */}
           <div className="screen-only">
