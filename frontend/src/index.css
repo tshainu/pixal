@@ -550,7 +550,7 @@ tr:hover td { background: #FAFAFA; }
   .print-only th,
   .print-only td { display: table-cell !important; }
 
-  .print-page { visibility: visible !important; position: fixed; top: 0; left: 0; width: 100%; }
+  .print-page { visibility: visible !important; position: static; width: 100%; }
   .screen-only { display: none !important; }
 
   /* ── Print page base ── */
@@ -667,7 +667,7 @@ tr:hover td { background: #FAFAFA; }
     margin-bottom: 6px;
     align-items: flex-start;
   }
-  .ps-left-col { flex: 0 0 44%; max-width: 44%; }
+  .ps-left-col { flex: 0 0 44%; max-width: 44%; break-inside: auto; }
   .ps-right-col { flex: 1; display: flex !important; flex-direction: column; gap: 6px; }
 
   /* ── TABLES ── */
@@ -706,11 +706,13 @@ tr:hover td { background: #FAFAFA; }
   }
 
   /* Names list */
-  .ps-names-block { margin-top: 14px; }
-  .ps-names-title { font-size: 11pt; font-weight: 800; color: #111; margin-bottom: 6px; }
-  .ps-names-table { font-size: 8.5pt; }
+  .ps-names-block { margin-top: 14px; break-inside: auto; }
+  .ps-names-title { font-size: 11pt; font-weight: 800; color: #111; margin-bottom: 6px; break-after: avoid; }
+  .ps-names-table { font-size: 8.5pt; break-inside: auto; }
+  .ps-names-table thead { display: table-header-group; }
   .ps-names-table th, .ps-names-table td { border: 1px solid #333 !important; }
   .ps-names-table td { padding: 3px 6px; text-align: center; }
+  .ps-names-table tr { break-inside: avoid; page-break-inside: avoid; }
   .ps-name-idx { color: #888; font-size: 7.5pt; }
   .ps-name-name { font-weight: 700; color: #111; text-align: left !important; }
   .ps-name-size { color: #111; }
