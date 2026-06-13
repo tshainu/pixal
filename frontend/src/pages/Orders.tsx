@@ -2093,29 +2093,28 @@ function PrintableOrderSheet({ order, nd }: { order: Order; nd: NotesData }) {
         </div>
       </div>
 
-      {/* ── INFO BAR: Name / Fabric / Dates ── */}
-      <div className="ps-infobar">
-        <div className="ps-info-item ps-info-name">
-          <span className="ps-info-lbl">NAME</span>
-          <span className="ps-info-dash">–</span>
-          <span className="ps-info-val">{order.customer_name}</span>
-        </div>
-        {order.fabric_details && (
-          <div className="ps-info-item">
-            <span className="ps-info-lbl">FABRIC</span>
-            <span className="ps-info-dash">–</span>
-            <span className="ps-info-val">{order.fabric_details}</span>
+      {/* ── ACCENT STRIP ── */}
+      <div className="ps-accent-strip" />
+
+      {/* ── CUSTOMER BAR ── */}
+      <div className="ps-customerbar">
+        <span className="ps-customer-name-lbl">Customer</span>
+        <span className="ps-customer-name-val">{order.customer_name}</span>
+        <div className="ps-customer-meta">
+          {order.fabric_details && (
+            <div className="ps-customer-meta-item">
+              <span className="ps-customer-meta-lbl">Fabric</span>
+              <span className="ps-customer-meta-val">{order.fabric_details}</span>
+            </div>
+          )}
+          <div className="ps-customer-meta-item">
+            <span className="ps-customer-meta-lbl">Order Date</span>
+            <span className="ps-customer-meta-val">{fmtDate(order.order_date)}</span>
           </div>
-        )}
-        <div className="ps-info-item">
-          <span className="ps-info-lbl">DATE</span>
-          <span className="ps-info-dash">–</span>
-          <span className="ps-info-val">{fmtDate(order.order_date)}</span>
-        </div>
-        <div className="ps-info-item">
-          <span className="ps-info-lbl">DELIVERED DATE</span>
-          <span className="ps-info-dash">–</span>
-          <span className="ps-info-val">{fmtDate(order.delivery_date)}</span>
+          <div className="ps-customer-meta-item">
+            <span className="ps-customer-meta-lbl">Delivery Date</span>
+            <span className="ps-customer-meta-val">{fmtDate(order.delivery_date)}</span>
+          </div>
         </div>
       </div>
 
@@ -2325,6 +2324,15 @@ function PrintableOrderSheet({ order, nd }: { order: Order; nd: NotesData }) {
           )}
         </div>
       )}
+
+      {/* ── FOOTER ── */}
+      <div className="ps-footer">
+        <div className="ps-footer-brand">PANDORA <span>GARMENTS</span></div>
+        <div className="ps-footer-sig">
+          <div>Authorized Signature ___________________</div>
+          <div style={{ marginTop: 2 }}>Received By ___________________</div>
+        </div>
+      </div>
 
     </div>
   );
