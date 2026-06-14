@@ -783,14 +783,8 @@ tr:hover td { background: #FAFAFA; }
 
 @media print {
   /* When printing a sale receipt - hide everything, show only receipt */
-  body.printing-sale * { visibility: hidden !important; }
-  body.printing-sale .receipt-80, body.printing-sale .receipt-80 * { visibility: visible !important; }
-  body.printing-sale .receipt-80 {
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 72mm !important;
-  }
+  body.printing-sale > * { display: none !important; }
+  body.printing-sale > .receipt-80 { display: block !important; }
 
   /* Override @page for thermal receipt - browser will use last @page rule */
 

@@ -81,6 +81,93 @@ type PriceType = 'selling_price' | 'wholesale_price' | 'cost_price';
 
 const WALK_IN_ID = 4; // Walk-In Customer DB id
 
+/* ─── GLOBAL 80mm PRINT HELPER ───────────────────────────────────── */
+function printReceipt(sale: any, items: any[]) {
+  const regularItems = items.filter((l: any) => !l.description?.startsWith('[Add-on]'));
+  const addonItems   = items.filter((l: any) =>  l.description?.startsWith('[Add-on]'));
+  const fmt = (n: number) => Number(n).toLocaleString('en-LK', { minimumFractionDigits: 2 });
+  const fmtSimple = (n: number) => Number(n).toLocaleString('en-LK', { minimumFractionDigits: 0 });
+  const total   = Number(sale.total_amount || 0);
+  const paid    = Number(sale.paid_amount  || 0);
+  const discount = Number(sale.discount   || 0);
+  const status  = sale.payment_status || '';
+  const date    = sale.sale_date || new Date().toISOString().slice(0, 10);
+  const time    = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+  const rows = [...regularItems, ...addonItems].map((l: any) => {
+    const name  = l.item_name || l.description || '';
+    const qty   = Number(l.qty || 1);
+    const price = Number(l.unit_price || 0);
+    const disc  = Number(l.discount || 0);
+    const line  = qty * price - disc;
+    return `<div class="r80-item-row">
+      <span class="r80-col-item">${name}</span>
+      <span class="r80-col-qty">${qty}</span>
+      <span class="r80-col-price">${fmtSimple(price)}</span>
+      <span class="r80-col-total">${fmtSimple(line)}</span>
+    </div>`;
+  }).join('');
+
+  const dueRow = status === 'Unpaid'
+    ? `<div class="r80-total-row r80-due"><span>DUE</span><span>Rs. ${fmt(total)}</span></div>`
+    : status === 'Partial'
+    ? `<div class="r80-total-row r80-due"><span>BALANCE DUE</span><span>Rs. ${fmt(total - paid)}</span></div>`
+    : '';
+
+  const html = `
+    <div class="receipt-80" id="__receipt_print__">
+      <div class="r80-header">
+        <div class="r80-shop-name">PANDORA GARMENTS</div>
+        <div class="r80-shop-sub">pandoralk.com</div>
+        <div class="r80-divider">--------------------------------</div>
+        <div class="r80-invoice">${sale.invoice_no || ''}</div>
+        <div class="r80-date">${date} | ${time}</div>
+        <div class="r80-customer">Customer: ${sale.customer_name || 'Walk-In Customer'}</div>
+        <div class="r80-divider">--------------------------------</div>
+      </div>
+      <div class="r80-items">
+        <div class="r80-items-header">
+          <span class="r80-col-item">ITEM</span>
+          <span class="r80-col-qty">QTY</span>
+          <span class="r80-col-price">PRICE</span>
+          <span class="r80-col-total">TOTAL</span>
+        </div>
+        <div class="r80-divider">--------------------------------</div>
+        ${rows}
+      </div>
+      <div class="r80-divider">--------------------------------</div>
+      ${discount > 0 ? `<div class="r80-total-row"><span>Discount</span><span>- ${fmtSimple(discount)}</span></div>` : ''}
+      <div class="r80-grand-total"><span>TOTAL</span><span>Rs. ${fmt(total)}</span></div>
+      ${paid > 0 && status !== 'Unpaid' ? `<div class="r80-total-row"><span>Paid</span><span>Rs. ${fmt(paid)}</span></div>` : ''}
+      ${dueRow}
+      <div class="r80-divider">--------------------------------</div>
+      <div class="r80-footer">
+        <div>Thank you for your business!</div>
+        <div style="margin-top:4px">Pandora Garments (Pvt) Ltd</div>
+      </div>
+      <div class="r80-cut">✂ - - - - - - - - - - - - - - - -</div>
+    </div>`;
+
+  const el = document.createElement('div');
+  el.innerHTML = html;
+  const node = el.firstElementChild as HTMLElement;
+  document.body.appendChild(node);
+
+  const style = document.createElement('style');
+  style.id = 'receipt-80-page';
+  style.textContent = '@media print { @page { size: 80mm auto; margin: 0; } }';
+  document.head.appendChild(style);
+
+  document.body.classList.add('printing-sale');
+  window.onafterprint = () => {
+    document.body.classList.remove('printing-sale');
+    document.getElementById('receipt-80-page')?.remove();
+    document.getElementById('__receipt_print__')?.remove();
+    window.onafterprint = null;
+  };
+  window.print();
+}
+
 function POSTab() {
   const qc = useQueryClient();
   const { data: allItems = [] } = useQuery({ queryKey: ['items'], queryFn: () => api.getItems() });
@@ -115,7 +202,7 @@ function POSTab() {
   const [billDiscount, setBillDiscount] = useState(0);
   const [showDiscountEdit, setShowDiscountEdit] = useState(false);
   const [discountInput, setDiscountInput] = useState('');
-  const [lastPrint, setLastPrint] = useState<{ invoice_no: string; customer_name: string; items: any[]; addons: any[]; total: number; paid: number; discount: number; payment_status: string; sale_date: string } | null>(null);
+
 
   // Auto-load Walk-In Customer on mount
   useEffect(() => {
@@ -262,42 +349,10 @@ function POSTab() {
     },
   });
 
-  const triggerPrint = () => {
-    // Inject 80mm page size style
-    const style = document.createElement('style');
-    style.id = 'receipt-80-page';
-    style.textContent = '@media print { @page { size: 80mm auto; margin: 0; } }';
-    document.head.appendChild(style);
-    document.body.classList.add('printing-sale');
-    window.onafterprint = () => {
-      document.body.classList.remove('printing-sale');
-      document.getElementById('receipt-80-page')?.remove();
-      window.onafterprint = null;
-    };
-    window.print();
-  };
-
   const handleSaveAndPrint = (mode: 'pay' | 'credit', cash: number) => {
-    const snapCart = [...cart];
-    const snapAddons = [...addons];
-    const snapDiscount = billDiscount;
-    const snapTotal = grandTotal;
-    const snapCustomer = selectedCustomer;
     saveSale.mutate({ mode, cash }, {
       onSuccess: (res: any) => {
-        const { status, paid } = resolvePaymentStatus(mode, cash);
-        setLastPrint({
-          invoice_no: res.sale?.invoice_no || '',
-          customer_name: snapCustomer?.customer?.name || 'Walk-In Customer',
-          items: snapCart,
-          addons: snapAddons,
-          total: snapTotal,
-          paid,
-          discount: snapDiscount,
-          payment_status: status,
-          sale_date: today(),
-        });
-        setTimeout(triggerPrint, 300);
+        setTimeout(() => printReceipt(res.sale, res.items || []), 200);
       }
     });
   };
@@ -921,87 +976,6 @@ function POSTab() {
       />
     )}
 
-    {/* ── 80mm THERMAL RECEIPT (print only) ── */}
-    {lastPrint && (
-      <div className="receipt-80 print-sale-only">
-        {/* Header */}
-        <div className="r80-header">
-          <div className="r80-shop-name">PANDORA GARMENTS</div>
-          <div className="r80-shop-sub">pandoralk.com</div>
-          <div className="r80-divider">--------------------------------</div>
-          <div className="r80-invoice">{lastPrint.invoice_no}</div>
-          <div className="r80-date">{lastPrint.sale_date} &nbsp;|&nbsp; {new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</div>
-          <div className="r80-customer">Customer: {lastPrint.customer_name}</div>
-          <div className="r80-divider">--------------------------------</div>
-        </div>
-
-        {/* Items */}
-        <div className="r80-items">
-          <div className="r80-items-header">
-            <span className="r80-col-item">ITEM</span>
-            <span className="r80-col-qty">QTY</span>
-            <span className="r80-col-price">PRICE</span>
-            <span className="r80-col-total">TOTAL</span>
-          </div>
-          <div className="r80-divider">--------------------------------</div>
-          {lastPrint.items.map((l, i) => (
-            <div key={i} className="r80-item-row">
-              <span className="r80-col-item">{l.item_name}</span>
-              <span className="r80-col-qty">{l.qty}</span>
-              <span className="r80-col-price">{Number(l.unit_price).toLocaleString('en-LK', { minimumFractionDigits: 0 })}</span>
-              <span className="r80-col-total">{(l.qty * l.unit_price - (l.discount || 0)).toLocaleString('en-LK', { minimumFractionDigits: 0 })}</span>
-            </div>
-          ))}
-          {lastPrint.addons.map((a, i) => (
-            <div key={'a' + i} className="r80-item-row">
-              <span className="r80-col-item">{a.name}</span>
-              <span className="r80-col-qty">{a.qty}</span>
-              <span className="r80-col-price">{Number(a.unit_price).toLocaleString('en-LK', { minimumFractionDigits: 0 })}</span>
-              <span className="r80-col-total">{(a.qty * a.unit_price).toLocaleString('en-LK', { minimumFractionDigits: 0 })}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Totals */}
-        <div className="r80-divider">--------------------------------</div>
-        {lastPrint.discount > 0 && (
-          <div className="r80-total-row">
-            <span>Discount</span>
-            <span>- {lastPrint.discount.toLocaleString('en-LK', { minimumFractionDigits: 0 })}</span>
-          </div>
-        )}
-        <div className="r80-grand-total">
-          <span>TOTAL</span>
-          <span>Rs. {lastPrint.total.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
-        </div>
-        {lastPrint.paid > 0 && lastPrint.payment_status !== 'Unpaid' && (
-          <div className="r80-total-row">
-            <span>Paid</span>
-            <span>Rs. {lastPrint.paid.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
-          </div>
-        )}
-        {lastPrint.payment_status === 'Unpaid' && (
-          <div className="r80-total-row r80-due">
-            <span>DUE</span>
-            <span>Rs. {lastPrint.total.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
-          </div>
-        )}
-        {lastPrint.payment_status === 'Partial' && (
-          <div className="r80-total-row r80-due">
-            <span>BALANCE DUE</span>
-            <span>Rs. {(lastPrint.total - lastPrint.paid).toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="r80-divider">--------------------------------</div>
-        <div className="r80-footer">
-          <div>Thank you for your business!</div>
-          <div style={{ marginTop: 4 }}>Pandora Garments (Pvt) Ltd</div>
-        </div>
-        <div className="r80-cut">✂ - - - - - - - - - - - - - - - -</div>
-      </div>
-    )}
     </>
   );
 }
@@ -1105,8 +1079,8 @@ function POSRecentModal({ onClose, onLoad }: { onClose: () => void; onLoad: (sal
   const reprinted = async (id: number) => {
     setLoading(id);
     try {
-      await api.getInvoice(id); // preload data
-      setTimeout(() => window.print(), 300);
+      const res = await api.getInvoice(id);
+      printReceipt(res.sale, res.items);
     } finally { setLoading(null); }
   };
 
@@ -1279,9 +1253,8 @@ function SalesListTab() {
   const reprints = async (id: number) => {
     setLoadingId(id);
     const res = await api.getInvoice(id);
-    setSelected({ ...res.sale, items: res.items });
     setLoadingId(null);
-    setTimeout(() => window.print(), 200);
+    printReceipt(res.sale, res.items);
   };
 
   // Shared line-items form block
@@ -1453,7 +1426,7 @@ function SalesListTab() {
                 <button className="btn btn-secondary btn-sm" onClick={() => { openEdit(selected.id); }}>
                   <Pencil size={13} /> Edit
                 </button>
-                <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>
+                <button className="btn btn-secondary btn-sm" onClick={() => selected && printReceipt(selected, (selected as any).items || [])}>
                   <Printer size={13} /> Reprint
                 </button>
                 <button className="btn-icon" onClick={() => setModal(null)}><X size={16} /></button>
