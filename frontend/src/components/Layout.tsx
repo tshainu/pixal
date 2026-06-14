@@ -5,7 +5,7 @@ import {
   Settings, BarChart2, UserCheck, Boxes,
   ShoppingBag, FileCheck, ChevronDown, ChevronRight,
   LayoutGrid, List, FilePlus, Calendar, Plus, GitBranch, Building2, Scan,
-  Tag, Package
+  Tag, Package, LogOut
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -51,7 +51,7 @@ const hrNav = [
   { to: '/evaluations', icon: FileText, label: 'Evaluations' },
 ];
 
-export default function Layout({ children }: { children: React.ReactNode }) {
+export default function Layout({ children, onLogout }: { children: React.ReactNode; onLogout?: () => void }) {
   const loc = useLocation();
   const onSales = loc.pathname === '/sales' || loc.pathname.startsWith('/sales') || loc.pathname === '/price-groups' || loc.pathname === '/addon-items';
   const onOrders = loc.pathname === '/orders' || loc.pathname.startsWith('/orders');
@@ -202,13 +202,30 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </Link>
           ))}
         </nav>
-        <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border)' }}>
+        <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--red)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: '0.75rem', flexShrink: 0 }}>PG</div>
-            <div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>Admin</div>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text3)' }}>Manager</div>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--red)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: '0.72rem', flexShrink: 0, letterSpacing: '0.02em' }}>AX70</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Admin</div>
+              <div style={{ fontSize: '0.63rem', color: 'var(--text3)' }}>Administrator</div>
             </div>
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                title="Sign out"
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'var(--text3)', padding: 4, borderRadius: 6,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'color 0.15s, background 0.15s',
+                  flexShrink: 0,
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#DC2626'; (e.currentTarget as HTMLButtonElement).style.background = '#FEF2F2'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text3)'; (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
+              >
+                <LogOut size={15} />
+              </button>
+            )}
           </div>
         </div>
       </aside>
