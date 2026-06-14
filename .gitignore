@@ -13,3 +13,4 @@ _*.png
 .env.worker
 .env.deploy
 .env.deploy
+.env.cloudflare

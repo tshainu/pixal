@@ -240,4 +240,55 @@ export const api = {
 
   sendWA: (payload: { to: string; message?: string; template_name?: string; template_lang?: string; template_params?: string[] }) =>
     req('/wa/send', 'POST', payload),
+  login: (user_id: string, username: string, password: string) => loginUser(user_id, username, password),
+};
+
+// ─── AUTH ────────────────────────────────────────────────────────────────────
+export async function loginUser(user_id: string, username: string, password: string) {
+  const res = await fetch(`${BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id, username, password }),
+  });
+  const data = await res.json() as any;
+  if (!res.ok) throw new Error(data.error || 'Login failed');
+  return data;
+}
+
+// ─── SUPER ADMIN ─────────────────────────────────────────────────────────────
+function saToken() { return sessionStorage.getItem('sa_token') || ''; }
+
+async function saReq(path: string, method = 'GET', body?: object) {
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', 'X-Super-Token': saToken() },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json() as any;
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+export const superAdmin = {
+  login: async (password: string) => {
+    const res = await fetch(`${BASE}/superadmin/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    const data = await res.json() as any;
+    if (!res.ok) throw new Error(data.error || 'Login failed');
+    return data;
+  },
+  getStats: () => saReq('/superadmin/stats'),
+  getBusinesses: () => saReq('/superadmin/businesses').then(d => d.businesses as any[]),
+  createBusiness: (data: object) => saReq('/superadmin/businesses', 'POST', data),
+  updateBusiness: (id: number, data: object) => saReq(`/superadmin/businesses/${id}`, 'PUT', data),
+  suspendBusiness: (id: number) => saReq(`/superadmin/businesses/${id}/suspend`, 'PATCH'),
+  activateBusiness: (id: number) => saReq(`/superadmin/businesses/${id}/activate`, 'PATCH'),
+  deleteBusiness: (id: number) => saReq(`/superadmin/businesses/${id}`, 'DELETE'),
+  getOverview: (id: number) => saReq(`/superadmin/businesses/${id}/overview`),
+  getCustomers: (id: number) => saReq(`/superadmin/businesses/${id}/customers`).then(d => d.customers as any[]),
+  getStaff: (id: number) => saReq(`/superadmin/businesses/${id}/staff`).then(d => d.staff as any[]),
+  getSales: (id: number) => saReq(`/superadmin/businesses/${id}/sales`).then(d => d.sales as any[]),
+  getOrders: (id: number) => saReq(`/superadmin/businesses/${id}/orders`).then(d => d.orders as any[]),
 };

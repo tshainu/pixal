@@ -1,4 +1,4 @@
-export interface Env { pandora_db: D1Database; ASSETS: Fetcher; }
+export interface Env { pandora_db: D1Database; ASSETS: Fetcher; SUPER_ADMIN_PASSWORD?: string; }
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -66,6 +66,158 @@ export default {
     }
 
     if (path === '/health') return json({ status: 'ok' });
+
+    // ─── AUTH: LOGIN ─────────────────────────────────────────────────────────
+    if (method === 'POST' && path === '/auth/login') {
+      const b: any = await request.json();
+      const { user_id, username, password } = b;
+      if (!user_id || !username || !password) return err('All fields required', 400);
+      const row = await env.pandora_db.prepare(
+        `SELECT id, user_id, username, business_name, status FROM businesses WHERE user_id=? AND username=? AND password_hash=?`
+      ).bind(user_id, username, password).first<any>();
+      if (!row) return err('Invalid User ID, username or password', 401);
+      if (row.status !== 'Active') return err('Account suspended. Contact administrator.', 403);
+      await env.pandora_db.prepare(`UPDATE businesses SET last_login=datetime('now') WHERE id=?`).bind(row.id).run();
+      return json({ ok: true, user: { id: row.id, user_id: row.user_id, username: row.username, business_name: row.business_name } });
+    }
+
+    // ─── SUPERADMIN AUTH ─────────────────────────────────────────────────────
+    const SUPER_PWD = env.SUPER_ADMIN_PASSWORD || 'Pandora@SuperAdmin2025';
+    if (method === 'POST' && path === '/superadmin/login') {
+      const b: any = await request.json();
+      if (b.password !== SUPER_PWD) return err('Invalid password', 401);
+      return json({ ok: true, token: 'sa_' + btoa(SUPER_PWD).slice(0,16) });
+    }
+
+    // Protect all /superadmin/* routes
+    if (path.startsWith('/superadmin/') && path !== '/superadmin/login') {
+      const auth = request.headers.get('X-Super-Token');
+      const expected = 'sa_' + btoa(SUPER_PWD).slice(0,16);
+      if (auth !== expected) return err('Unauthorized', 401);
+    }
+
+    // ─── SUPERADMIN: BUSINESSES ───────────────────────────────────────────────
+    if (path === '/superadmin/businesses') {
+      if (method === 'GET') {
+        const rows = await env.pandora_db.prepare(`SELECT id, user_id, username, business_name, contact_name, contact_email, contact_phone, plan, status, notes, created_at, last_login FROM businesses ORDER BY created_at DESC`).all<any>();
+        return json({ businesses: rows.results });
+      }
+      if (method === 'POST') {
+        const b: any = await request.json();
+        const { user_id, username, password, business_name, contact_name, contact_email, contact_phone, plan, notes } = b;
+        if (!user_id || !username || !password || !business_name) return err('user_id, username, password, business_name required', 400);
+        const existing = await env.pandora_db.prepare(`SELECT id FROM businesses WHERE user_id=? OR username=?`).bind(user_id, username).first<any>();
+        if (existing) return err('User ID or username already exists', 409);
+        const r = await env.pandora_db.prepare(
+          `INSERT INTO businesses (user_id,username,password_hash,business_name,contact_name,contact_email,contact_phone,plan,notes) VALUES (?,?,?,?,?,?,?,?,?)`
+        ).bind(user_id, username, password, business_name, contact_name||null, contact_email||null, contact_phone||null, plan||'Standard', notes||null).run();
+        const row = await env.pandora_db.prepare(`SELECT * FROM businesses WHERE id=?`).bind(r.meta.last_row_id).first<any>();
+        return json({ business: row }, 201);
+      }
+    }
+
+    if (path.startsWith('/superadmin/businesses/')) {
+      const parts = path.split('/');
+      const biz_id = parseInt(parts[3]);
+      const sub = parts[4] || '';
+      if (isNaN(biz_id)) return err('Invalid id', 400);
+
+      if (method === 'PUT' && !sub) {
+        const b: any = await request.json();
+        const allowed = ['business_name','contact_name','contact_email','contact_phone','plan','notes','password_hash'];
+        const fields: string[] = [];
+        const vals: any[] = [];
+        for (const k of allowed) { if (b[k] !== undefined) { fields.push(`${k}=?`); vals.push(b[k]); } }
+        if (b.password) { fields.push('password_hash=?'); vals.push(b.password); }
+        if (!fields.length) return err('Nothing to update', 400);
+        vals.push(biz_id);
+        await env.pandora_db.prepare(`UPDATE businesses SET ${fields.join(',')} WHERE id=?`).bind(...vals).run();
+        const row = await env.pandora_db.prepare(`SELECT id,user_id,username,business_name,contact_name,contact_email,contact_phone,plan,status,notes,created_at,last_login FROM businesses WHERE id=?`).bind(biz_id).first<any>();
+        return json({ business: row });
+      }
+
+      if (method === 'PATCH' && sub === 'suspend') {
+        await env.pandora_db.prepare(`UPDATE businesses SET status='Suspended' WHERE id=?`).bind(biz_id).run();
+        return json({ ok: true, status: 'Suspended' });
+      }
+      if (method === 'PATCH' && sub === 'activate') {
+        await env.pandora_db.prepare(`UPDATE businesses SET status='Active' WHERE id=?`).bind(biz_id).run();
+        return json({ ok: true, status: 'Active' });
+      }
+      if (method === 'DELETE' && !sub) {
+        await env.pandora_db.prepare(`DELETE FROM businesses WHERE id=?`).bind(biz_id).run();
+        return json({ ok: true });
+      }
+
+      // ── Per-business data views ──────────────────────────────────────────
+      if (method === 'GET' && sub === 'overview') {
+        const [cust, staff, sales, orders, expenses, topCust, recentOrders, monthlySales] = await Promise.all([
+          env.pandora_db.prepare(`SELECT COUNT(*) c FROM customers WHERE status='Active'`).first<any>(),
+          env.pandora_db.prepare(`SELECT COUNT(*) c FROM staff WHERE status='Active'`).first<any>(),
+          env.pandora_db.prepare(`SELECT COUNT(*) c, COALESCE(SUM(total_amount),0) s FROM sales`).first<any>(),
+          env.pandora_db.prepare(`SELECT COUNT(*) c FROM orders WHERE status NOT IN ('Delivered','Collected','Cancelled')`).first<any>(),
+          env.pandora_db.prepare(`SELECT COALESCE(SUM(amount),0) s FROM expenses`).first<any>(),
+          env.pandora_db.prepare(`SELECT c.name, COUNT(s.id) cnt, COALESCE(SUM(s.total_amount),0) rev FROM sales s JOIN customers c ON c.id=s.customer_id GROUP BY c.id ORDER BY rev DESC LIMIT 5`).all<any>(),
+          env.pandora_db.prepare(`SELECT o.order_no, c.name customer, o.total_amount, o.status, o.created_at FROM orders o LEFT JOIN customers c ON c.id=o.customer_id ORDER BY o.created_at DESC LIMIT 10`).all<any>(),
+          env.pandora_db.prepare(`SELECT strftime('%Y-%m',sale_date) m, ROUND(SUM(total_amount),2) total FROM sales GROUP BY m ORDER BY m DESC LIMIT 12`).all<any>(),
+        ]);
+        return json({
+          customers: cust?.c ?? 0,
+          staff: staff?.c ?? 0,
+          total_sales: sales?.c ?? 0,
+          total_revenue: sales?.s ?? 0,
+          active_orders: orders?.c ?? 0,
+          total_expenses: expenses?.s ?? 0,
+          top_customers: topCust.results,
+          recent_orders: recentOrders.results,
+          monthly_sales: monthlySales.results,
+        });
+      }
+
+      if (method === 'GET' && sub === 'customers') {
+        const rows = await env.pandora_db.prepare(`SELECT id,customer_code,name,company_name,mobile,city,status,created_at FROM customers ORDER BY created_at DESC LIMIT 200`).all<any>();
+        return json({ customers: rows.results });
+      }
+      if (method === 'GET' && sub === 'staff') {
+        const rows = await env.pandora_db.prepare(`SELECT s.id,s.staff_id,s.name,s.position,s.mobile,s.status,d.name dept FROM staff s LEFT JOIN departments d ON d.id=s.department_id ORDER BY s.name LIMIT 200`).all<any>();
+        return json({ staff: rows.results });
+      }
+      if (method === 'GET' && sub === 'sales') {
+        const rows = await env.pandora_db.prepare(`SELECT s.id,s.invoice_no,c.name customer,s.sale_date,s.total_amount,s.payment_status FROM sales s LEFT JOIN customers c ON c.id=s.customer_id ORDER BY s.sale_date DESC LIMIT 200`).all<any>();
+        return json({ sales: rows.results });
+      }
+      if (method === 'GET' && sub === 'orders') {
+        const rows = await env.pandora_db.prepare(`SELECT o.id,o.order_no,c.name customer,o.order_date,o.delivery_date,o.total_amount,o.status FROM orders o LEFT JOIN customers c ON c.id=o.customer_id ORDER BY o.created_at DESC LIMIT 200`).all<any>();
+        return json({ orders: rows.results });
+      }
+    }
+
+    // ─── SUPERADMIN: PLATFORM STATS ───────────────────────────────────────────
+    if (method === 'GET' && path === '/superadmin/stats') {
+      const auth = request.headers.get('X-Super-Token');
+      const expected = 'sa_' + btoa(SUPER_PWD).slice(0,16);
+      if (auth !== expected) return err('Unauthorized', 401);
+      const [total, active, suspended, recent, totalRev, totalCust, totalOrders] = await Promise.all([
+        env.pandora_db.prepare(`SELECT COUNT(*) c FROM businesses`).first<any>(),
+        env.pandora_db.prepare(`SELECT COUNT(*) c FROM businesses WHERE status='Active'`).first<any>(),
+        env.pandora_db.prepare(`SELECT COUNT(*) c FROM businesses WHERE status='Suspended'`).first<any>(),
+        env.pandora_db.prepare(`SELECT id,user_id,business_name,status,created_at,last_login FROM businesses ORDER BY created_at DESC LIMIT 5`).all<any>(),
+        env.pandora_db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM sales`).first<any>(),
+        env.pandora_db.prepare(`SELECT COUNT(*) c FROM customers`).first<any>(),
+        env.pandora_db.prepare(`SELECT COUNT(*) c FROM orders`).first<any>(),
+      ]);
+      return json({
+        total_businesses: total?.c ?? 0,
+        active_businesses: active?.c ?? 0,
+        suspended_businesses: suspended?.c ?? 0,
+        recent_businesses: recent.results,
+        platform_revenue: totalRev?.s ?? 0,
+        total_customers: totalCust?.c ?? 0,
+        total_orders: totalOrders?.c ?? 0,
+      });
+    }
+
+
 
     // ─── DASHBOARD ───────────────────────────────────────────────────────────
     if (method === 'GET' && path === '/dashboard') {
