@@ -1138,8 +1138,8 @@ export default {
         const to = url.searchParams.get('to');
         const statusFilter = url.searchParams.get('status') || 'Delivered';
         let where = `WHERE o.status='${statusFilter}'`;
-        if (from && to) where += ` AND o.delivery_date >= '${from}' AND o.delivery_date <= '${to}'`;
-        else if (month) where += ` AND strftime('%Y-%m',o.delivery_date)='${month}'`;
+        if (from && to) where += ` AND o.order_date >= '${from}' AND o.order_date <= '${to}'`;
+        else if (month) where += ` AND strftime('%Y-%m',o.order_date)='${month}'`;
 
         // Summary by product type
         const byProduct = await env.pandora_db.prepare(`
