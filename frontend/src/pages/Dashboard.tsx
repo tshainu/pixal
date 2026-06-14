@@ -156,7 +156,7 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
 
-        {/* Charts row 2 — pie + top customers + recent orders */}
+        {/* Charts row 2 — pie + top customers + top performers + recent orders */}
         <div className="charts-grid">
           <div className="card">
             <div className="card-title">Orders by Status</div>
@@ -189,6 +189,40 @@ export default function Dashboard() {
                 </ResponsiveContainer>
               )}
           </div>
+
+          {/* Top Performers — moved here, before Recent Orders */}
+          <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <div style={{ background: '#6A1FA015', borderRadius: 8, padding: 6, color: '#6A1FA0', display: 'flex' }}>
+                <Trophy size={16} />
+              </div>
+              <div className="card-title" style={{ marginBottom: 0 }}>Top Performers — {thisMonthLabel}</div>
+            </div>
+            {topEmployees.length === 0 ? (
+              <div className="empty" style={{ flex: 1, padding: '24px 0' }}>
+                <div className="empty-icon">🏆</div>
+                <p>No evaluations this month</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {topEmployees.map((emp, idx) => (
+                  <LeaderboardRow key={idx} rank={idx + 1} emp={emp} />
+                ))}
+              </div>
+            )}
+            {topEmployees.length > 0 && (
+              <div style={{
+                marginTop: 16, padding: '10px 12px', borderRadius: 10,
+                background: 'linear-gradient(135deg, #6A1FA010, #4E6FFF08)',
+                border: '1px solid #6A1FA020',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+              }}>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text3)' }}>Team Avg Score</span>
+                <span style={{ fontWeight: 800, fontSize: '1.1rem', color: '#6A1FA0' }}>{d.monthAvgKpi ?? 0}%</span>
+              </div>
+            )}
+          </div>
+
           <div className="card">
             <div className="card-title">Recent Orders</div>
             <div className="table-wrap">
@@ -214,10 +248,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Bottom row — upcoming deliveries + top performers */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 16, marginTop: 16 }}>
-
-          {/* Upcoming Deliveries */}
+        {/* Bottom row — upcoming deliveries full width */}
+        <div style={{ marginTop: 16 }}>
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div className="card-title" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -258,41 +290,6 @@ export default function Dashboard() {
                     })}
                   </tbody>
                 </table>
-              </div>
-            )}
-          </div>
-
-          {/* Top Performers Leaderboard */}
-          <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-              <div style={{ background: '#6A1FA015', borderRadius: 8, padding: 6, color: '#6A1FA0', display: 'flex' }}>
-                <Trophy size={16} />
-              </div>
-              <div className="card-title" style={{ marginBottom: 0 }}>Top Performers — {thisMonthLabel}</div>
-            </div>
-
-            {topEmployees.length === 0 ? (
-              <div className="empty" style={{ flex: 1, padding: '24px 0' }}>
-                <div className="empty-icon">🏆</div>
-                <p>No evaluations this month</p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {topEmployees.map((emp, idx) => (
-                  <LeaderboardRow key={idx} rank={idx + 1} emp={emp} />
-                ))}
-              </div>
-            )}
-
-            {topEmployees.length > 0 && (
-              <div style={{
-                marginTop: 16, padding: '10px 12px', borderRadius: 10,
-                background: 'linear-gradient(135deg, #6A1FA010, #4E6FFF08)',
-                border: '1px solid #6A1FA020',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-              }}>
-                <span style={{ fontSize: '0.78rem', color: 'var(--text3)' }}>Team Avg Score</span>
-                <span style={{ fontWeight: 800, fontSize: '1.1rem', color: '#6A1FA0' }}>{d.monthAvgKpi ?? 0}%</span>
               </div>
             )}
           </div>
