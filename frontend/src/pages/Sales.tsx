@@ -115,6 +115,7 @@ function POSTab() {
   const [billDiscount, setBillDiscount] = useState(0);
   const [showDiscountEdit, setShowDiscountEdit] = useState(false);
   const [discountInput, setDiscountInput] = useState('');
+  const [lastPrint, setLastPrint] = useState<{ invoice_no: string; customer_name: string; items: any[]; addons: any[]; total: number; paid: number; discount: number; payment_status: string; sale_date: string } | null>(null);
 
   // Auto-load Walk-In Customer on mount
   useEffect(() => {
@@ -261,9 +262,43 @@ function POSTab() {
     },
   });
 
+  const triggerPrint = () => {
+    // Inject 80mm page size style
+    const style = document.createElement('style');
+    style.id = 'receipt-80-page';
+    style.textContent = '@media print { @page { size: 80mm auto; margin: 0; } }';
+    document.head.appendChild(style);
+    document.body.classList.add('printing-sale');
+    window.onafterprint = () => {
+      document.body.classList.remove('printing-sale');
+      document.getElementById('receipt-80-page')?.remove();
+      window.onafterprint = null;
+    };
+    window.print();
+  };
+
   const handleSaveAndPrint = (mode: 'pay' | 'credit', cash: number) => {
+    const snapCart = [...cart];
+    const snapAddons = [...addons];
+    const snapDiscount = billDiscount;
+    const snapTotal = grandTotal;
+    const snapCustomer = selectedCustomer;
     saveSale.mutate({ mode, cash }, {
-      onSuccess: () => { setTimeout(() => window.print(), 400); }
+      onSuccess: (res: any) => {
+        const { status, paid } = resolvePaymentStatus(mode, cash);
+        setLastPrint({
+          invoice_no: res.sale?.invoice_no || '',
+          customer_name: snapCustomer?.customer?.name || 'Walk-In Customer',
+          items: snapCart,
+          addons: snapAddons,
+          total: snapTotal,
+          paid,
+          discount: snapDiscount,
+          payment_status: status,
+          sale_date: today(),
+        });
+        setTimeout(triggerPrint, 300);
+      }
     });
   };
 
@@ -884,6 +919,88 @@ function POSTab() {
           await selectCustomer(c);
         }}
       />
+    )}
+
+    {/* ── 80mm THERMAL RECEIPT (print only) ── */}
+    {lastPrint && (
+      <div className="receipt-80 print-sale-only">
+        {/* Header */}
+        <div className="r80-header">
+          <div className="r80-shop-name">PANDORA GARMENTS</div>
+          <div className="r80-shop-sub">pandoralk.com</div>
+          <div className="r80-divider">--------------------------------</div>
+          <div className="r80-invoice">{lastPrint.invoice_no}</div>
+          <div className="r80-date">{lastPrint.sale_date} &nbsp;|&nbsp; {new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</div>
+          <div className="r80-customer">Customer: {lastPrint.customer_name}</div>
+          <div className="r80-divider">--------------------------------</div>
+        </div>
+
+        {/* Items */}
+        <div className="r80-items">
+          <div className="r80-items-header">
+            <span className="r80-col-item">ITEM</span>
+            <span className="r80-col-qty">QTY</span>
+            <span className="r80-col-price">PRICE</span>
+            <span className="r80-col-total">TOTAL</span>
+          </div>
+          <div className="r80-divider">--------------------------------</div>
+          {lastPrint.items.map((l, i) => (
+            <div key={i} className="r80-item-row">
+              <span className="r80-col-item">{l.item_name}</span>
+              <span className="r80-col-qty">{l.qty}</span>
+              <span className="r80-col-price">{Number(l.unit_price).toLocaleString('en-LK', { minimumFractionDigits: 0 })}</span>
+              <span className="r80-col-total">{(l.qty * l.unit_price - (l.discount || 0)).toLocaleString('en-LK', { minimumFractionDigits: 0 })}</span>
+            </div>
+          ))}
+          {lastPrint.addons.map((a, i) => (
+            <div key={'a' + i} className="r80-item-row">
+              <span className="r80-col-item">{a.name}</span>
+              <span className="r80-col-qty">{a.qty}</span>
+              <span className="r80-col-price">{Number(a.unit_price).toLocaleString('en-LK', { minimumFractionDigits: 0 })}</span>
+              <span className="r80-col-total">{(a.qty * a.unit_price).toLocaleString('en-LK', { minimumFractionDigits: 0 })}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Totals */}
+        <div className="r80-divider">--------------------------------</div>
+        {lastPrint.discount > 0 && (
+          <div className="r80-total-row">
+            <span>Discount</span>
+            <span>- {lastPrint.discount.toLocaleString('en-LK', { minimumFractionDigits: 0 })}</span>
+          </div>
+        )}
+        <div className="r80-grand-total">
+          <span>TOTAL</span>
+          <span>Rs. {lastPrint.total.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
+        </div>
+        {lastPrint.paid > 0 && lastPrint.payment_status !== 'Unpaid' && (
+          <div className="r80-total-row">
+            <span>Paid</span>
+            <span>Rs. {lastPrint.paid.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
+          </div>
+        )}
+        {lastPrint.payment_status === 'Unpaid' && (
+          <div className="r80-total-row r80-due">
+            <span>DUE</span>
+            <span>Rs. {lastPrint.total.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
+          </div>
+        )}
+        {lastPrint.payment_status === 'Partial' && (
+          <div className="r80-total-row r80-due">
+            <span>BALANCE DUE</span>
+            <span>Rs. {(lastPrint.total - lastPrint.paid).toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="r80-divider">--------------------------------</div>
+        <div className="r80-footer">
+          <div>Thank you for your business!</div>
+          <div style={{ marginTop: 4 }}>Pandora Garments (Pvt) Ltd</div>
+        </div>
+        <div className="r80-cut">✂ - - - - - - - - - - - - - - - -</div>
+      </div>
     )}
     </>
   );
