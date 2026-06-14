@@ -122,6 +122,7 @@ export const api = {
   createInvoice: (data: object) => req('/sales', 'POST', data).then(d => d.sale),
   updateInvoice: (id: number, data: object) => req(`/sales/${id}`, 'PUT', data).then(d => d.sale),
   deleteInvoice: (id: number) => req(`/sales/${id}`, 'DELETE'),
+  collectPayment: (id: number, data: { amount: number; method: string; paid_at: string }) => req(`/sales/${id}/payment`, 'POST', data),
 
   // ── Quotations ───────────────────────────────────────────
   getQuotations: (params?: { search?: string; customer_id?: number }) => {

@@ -910,6 +910,27 @@ export default {
       }
     }
 
+    // ─── COLLECT PAYMENT ─────────────────────────────────────────────────────
+    const collectMatch = path.match(/^\/sales\/(\d+)\/payment$/);
+    if (collectMatch && method === 'POST') {
+      const sid = Number(collectMatch[1]);
+      const b: any = await request.json();
+      const amount = Number(b.amount || 0);
+      const method2 = b.method || 'Cash';
+      const paidAt = b.paid_at || new Date().toISOString().slice(0, 10);
+      if (amount <= 0) return err('Amount must be > 0', 400);
+      await env.pandora_db.prepare(`CREATE TABLE IF NOT EXISTS sale_payments (id INTEGER PRIMARY KEY AUTOINCREMENT, sale_id INTEGER NOT NULL, amount REAL NOT NULL, method TEXT NOT NULL DEFAULT 'Cash', paid_at TEXT NOT NULL DEFAULT (date('now')), FOREIGN KEY(sale_id) REFERENCES sales(id) ON DELETE CASCADE)`).run();
+      await env.pandora_db.prepare(`INSERT INTO sale_payments (sale_id,amount,method,paid_at) VALUES (?,?,?,?)`).bind(sid, amount, method2, paidAt).run();
+      const sale = await env.pandora_db.prepare('SELECT * FROM sales WHERE id=?').bind(sid).first<any>();
+      const newPaid = Number(sale?.paid_amount || 0) + amount;
+      const total = Number(sale?.total_amount || 0);
+      const newStatus = newPaid >= total ? 'Paid' : newPaid > 0 ? 'Partial' : 'Unpaid';
+      await env.pandora_db.prepare(`UPDATE sales SET paid_amount=?,payment_status=?,payment_type=? WHERE id=?`).bind(newPaid, newStatus, method2, sid).run();
+      const updated = await env.pandora_db.prepare('SELECT s.*,c.name customer_name,COALESCE(c.phone,c.mobile) customer_phone FROM sales s LEFT JOIN customers c ON c.id=s.customer_id WHERE s.id=?').bind(sid).first();
+      const payments = await env.pandora_db.prepare('SELECT * FROM sale_payments WHERE sale_id=? ORDER BY paid_at ASC, id ASC').bind(sid).all();
+      return json({ sale: updated, payments: payments.results });
+    }
+
     // ─── ORDERS ──────────────────────────────────────────────────────────────
     if (method === 'GET' && path === '/orders') {
       const status = url.searchParams.get('status');

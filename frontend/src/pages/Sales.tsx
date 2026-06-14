@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../api';
-import { Plus, Search, Eye, X, Trash2, ArrowRight, ShoppingBag, FileText, FileCheck, ScanLine, ChevronDown, Pencil, Printer } from 'lucide-react';
+import { Plus, Search, Eye, X, Trash2, ArrowRight, ShoppingBag, FileText, FileCheck, ScanLine, ChevronDown, Pencil, Printer, DollarSign } from 'lucide-react';
 import AddCustomerModal from '../components/AddCustomerModal';
 
 type LineItem = { item_id: number; item_name: string; qty: number; unit_price: number; discount: number };
@@ -1238,9 +1238,10 @@ function SalesListTab() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
-  const [modal, setModal] = useState<null | 'create' | 'view' | 'edit'>(null);
+  const [modal, setModal] = useState<null | 'create' | 'view' | 'edit' | 'collect'>(null);
   const [selected, setSelected] = useState<Sale | null>(null);
   const [loadingId, setLoadingId] = useState<number | null>(null);
+  const [collectForm, setCollectForm] = useState({ amount: 0, method: 'Cash', paid_at: today() });
   const blankForm = { customer_id: '', sale_date: today(), notes: '', payment_type: 'Cash', paid_amount: 0, items: [] as LineItem[] };
   const [form, setForm] = useState(blankForm);
 
@@ -1302,6 +1303,16 @@ function SalesListTab() {
     setLoadingId(null);
     printReceipt(res.sale, res.items, settings as Record<string, string>, res.payments);
   };
+
+  const collectMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { amount: number; method: string; paid_at: string } }) =>
+      api.collectPayment(id, data),
+    onSuccess: (res: any) => {
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      setSelected((prev: any) => prev ? { ...prev, ...res.sale } : prev);
+      setModal('view');
+    },
+  });
 
   // Shared line-items form block
   const LineItemsForm = () => (
@@ -1372,6 +1383,11 @@ function SalesListTab() {
                         <button className="btn-icon" title="View" onClick={() => openView(s.id)} disabled={loadingId === s.id}><Eye size={14} /></button>
                         <button className="btn-icon" title="Edit" onClick={() => openEdit(s.id)} disabled={loadingId === s.id}><Pencil size={14} /></button>
                         <button className="btn-icon" title="Reprint" onClick={() => reprints(s.id)} disabled={loadingId === s.id}><Printer size={14} /></button>
+                        {(s.payment_status === 'Partial' || s.payment_status === 'Unpaid') && (
+                          <button className="btn-icon" title="Collect Payment" style={{ color: 'var(--success)' }} onClick={() => { setSelected(s as any); setCollectForm({ amount: (s as any).total_amount - (s as any).paid_amount, method: 'Cash', paid_at: today() }); setModal('collect'); }} disabled={loadingId === s.id}>
+                            <DollarSign size={14} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1472,6 +1488,11 @@ function SalesListTab() {
                 <button className="btn btn-secondary btn-sm" onClick={() => { openEdit(selected.id); }}>
                   <Pencil size={13} /> Edit
                 </button>
+                {(selected.payment_status === 'Partial' || selected.payment_status === 'Unpaid') && (
+                  <button className="btn btn-primary btn-sm" style={{ background: 'var(--success)' }} onClick={() => { setCollectForm({ amount: (selected as any).total_amount - (selected as any).paid_amount, method: 'Cash', paid_at: today() }); setModal('collect'); }}>
+                    <DollarSign size={13} /> Collect
+                  </button>
+                )}
                 <button className="btn btn-secondary btn-sm" onClick={async () => { if (!selected) return; const res = await api.getInvoice(selected.id); printReceipt(res.sale, res.items, settings as Record<string, string>, res.payments); }}>
                   <Printer size={13} /> Reprint
                 </button>
@@ -1502,6 +1523,57 @@ function SalesListTab() {
               {selected.notes && <div style={{ marginTop: 12, fontSize: '0.82rem', color: 'var(--text3)' }}>{selected.notes}</div>}
             </div>
             <div className="modal-footer"><button className="btn btn-secondary" onClick={() => setModal(null)}>Close</button></div>
+          </div>
+        </div>
+      )}
+
+      {/* ── COLLECT PAYMENT modal ── */}
+      {modal === 'collect' && selected && (
+        <div className="modal-overlay" onClick={() => setModal('view')}>
+          <div className="modal" style={{ maxWidth: 380 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Collect Payment — {(selected as any).invoice_no}</h3>
+              <button className="btn-icon" onClick={() => setModal('view')}><X size={16} /></button>
+            </div>
+            <div className="modal-body">
+              <div style={{ background: 'var(--bg2)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: '0.85rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Total</span><strong>Rs. {fmt((selected as any).total_amount)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Already Paid</span><span style={{ color: 'var(--success)' }}>Rs. {fmt((selected as any).paid_amount)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 6, fontWeight: 700 }}>
+                  <span>Balance Due</span><span style={{ color: 'var(--red)' }}>Rs. {fmt((selected as any).total_amount - (selected as any).paid_amount)}</span>
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Amount Collecting</label>
+                <input className="form-control" type="number" min={0.01} step={0.01}
+                  value={collectForm.amount}
+                  onChange={e => setCollectForm(p => ({ ...p, amount: Number(e.target.value) }))} />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Method</label>
+                  <select className="form-control" value={collectForm.method} onChange={e => setCollectForm(p => ({ ...p, method: e.target.value }))}>
+                    <option>Cash</option><option>Bank Transfer</option><option>Cheque</option><option>Card</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Date</label>
+                  <input className="form-control" type="date" value={collectForm.paid_at} onChange={e => setCollectForm(p => ({ ...p, paid_at: e.target.value }))} />
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModal('view')}>Cancel</button>
+              <button className="btn btn-primary" style={{ background: 'var(--success)' }}
+                disabled={collectMutation.isPending || collectForm.amount <= 0}
+                onClick={() => collectMutation.mutate({ id: (selected as any).id, data: collectForm })}>
+                {collectMutation.isPending ? 'Saving…' : 'Confirm Payment'}
+              </button>
+            </div>
           </div>
         </div>
       )}
