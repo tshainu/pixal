@@ -806,7 +806,7 @@ tr:hover td { background: #FAFAFA; }
   .r80-invoice { font-size: 10pt; font-weight: 800; }
   .r80-date { font-size: 7.5pt; color: #444; margin: 2px 0; }
   .r80-customer { font-size: 8pt; margin: 2px 0 3px; }
-  .r80-divider { font-size: 8pt; color: #888; margin: 3px 0; letter-spacing: 0; }
+  .r80-divider { display: block; border: none; border-top: 1px dashed #999; margin: 4px 0; width: 100%; }
 
   .r80-items { width: 100%; }
   .r80-items-header {

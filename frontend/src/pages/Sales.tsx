@@ -131,14 +131,14 @@ function printReceipt(sale: any, items: any[], settings?: Record<string, string>
     <div class="receipt-80" id="__receipt_print__">
       <div class="r80-header">
         ${headerBlock}
-        <div class="r80-divider">--------------------------------</div>
+        <hr class="r80-divider" />
         <div class="r80-invoice">Invoice: ${sale.invoice_no || ''}</div>
         ${orderNo ? `<div class="r80-invoice">Order: ${orderNo}</div>` : ''}
         <div class="r80-date">${date} | ${time}</div>
-        <div class="r80-divider">--------------------------------</div>
+        <hr class="r80-divider" />
         <div class="r80-customer"><strong>${customerName}</strong></div>
         ${customerPhone ? `<div class="r80-customer">${customerPhone}</div>` : ''}
-        <div class="r80-divider">--------------------------------</div>
+        <hr class="r80-divider" />
       </div>
       <div class="r80-items">
         <div class="r80-items-header">
@@ -147,15 +147,15 @@ function printReceipt(sale: any, items: any[], settings?: Record<string, string>
           <span class="r80-col-price">PRICE</span>
           <span class="r80-col-total">TOTAL</span>
         </div>
-        <div class="r80-divider">--------------------------------</div>
+        <hr class="r80-divider" />
         ${rows}
       </div>
-      <div class="r80-divider">--------------------------------</div>
+      <hr class="r80-divider" />
       ${discount > 0 ? `<div class="r80-total-row"><span>Discount</span><span>- ${fmtSimple(discount)}</span></div>` : ''}
       <div class="r80-grand-total"><span>TOTAL</span><span>Rs. ${fmt(total)}</span></div>
       ${paid > 0 && status !== 'Unpaid' ? `<div class="r80-total-row"><span>Paid</span><span>Rs. ${fmt(paid)}</span></div>` : ''}
       ${dueRow}
-      <div class="r80-divider">--------------------------------</div>
+      <hr class="r80-divider" />
       <div class="r80-footer">
         <div>Thank you for your business!</div>
         ${!headerImgUrl ? `<div style="margin-top:4px">${shopName}</div>` : ''}
