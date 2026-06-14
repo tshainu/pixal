@@ -4,24 +4,73 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { Save, ChevronLeft } from 'lucide-react';
 
+// Star rating with hover + click
 function StarRating({ value, onChange, max = 5 }: { value: number; onChange: (v: number) => void; max?: number }) {
   const [hover, setHover] = useState(0);
   return (
-    <div className="stars">
-      {Array.from({ length: max }, (_, i) => i + 1).map(s => (
-        <span
-          key={s}
-          className={`star ${s <= (hover || value) ? 'filled' : ''}`}
-          onMouseEnter={() => setHover(s)}
-          onMouseLeave={() => setHover(0)}
-          onClick={() => onChange(s)}
-        >★</span>
-      ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className="stars" style={{ gap: 6 }}>
+        {Array.from({ length: max }, (_, i) => i + 1).map(s => (
+          <span
+            key={s}
+            style={{
+              fontSize: '1.6rem', cursor: 'pointer', lineHeight: 1,
+              color: s <= (hover || value) ? '#F59E0B' : '#D1D5DB',
+              textShadow: s <= (hover || value) ? '0 1px 3px rgba(245,158,11,0.4)' : 'none',
+              transition: 'color 0.12s, transform 0.1s',
+              transform: s <= (hover || value) ? 'scale(1.15)' : 'scale(1)',
+              display: 'inline-block',
+            }}
+            onMouseEnter={() => setHover(s)}
+            onMouseLeave={() => setHover(0)}
+            onClick={() => onChange(s)}
+          >★</span>
+        ))}
+      </div>
+      {/* Drag slider below stars */}
+      <input
+        type="range" min={0} max={max} step={1} value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        style={{ width: '100%', accentColor: '#F59E0B', cursor: 'pointer' }}
+      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text3)', marginTop: -2 }}>
+        <span>0</span><span>{max}</span>
+      </div>
+    </div>
+  );
+}
+
+// Slider-only rating (for numeric fields like leave days, minutes)
+function SliderRating({ value, onChange, min = 0, max = 10, step = 1, label, score, scoreOf = 10 }:
+  { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; label: string; score: number; scoreOf?: number }) {
+  const pct = ((value - min) / (max - min)) * 100;
+  const scoreColor = score >= 8 ? '#16a34a' : score >= 6 ? '#F59E0B' : score >= 4 ? '#ea580c' : '#dc2626';
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--text2)' }}>{label}: <strong>{value}</strong></span>
+        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: scoreColor, background: scoreColor + '18', padding: '2px 10px', borderRadius: 20 }}>
+          Score: {score}/{scoreOf}
+        </span>
+      </div>
+      <input
+        type="range" min={min} max={max} step={step} value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        style={{ width: '100%', accentColor: '#E11D48', cursor: 'pointer' }}
+      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text3)', marginTop: -2 }}>
+        <span>{min}</span>
+        <div style={{ width: `${Math.min(pct, 98)}%`, textAlign: 'right', fontSize: '0.6rem', color: 'var(--text3)' }}></div>
+        <span>{max}</span>
+      </div>
     </div>
   );
 }
 
 function starsToScore(stars: number, max = 5) { return Math.round((stars / max) * 10); }
+
+// Today's date as YYYY-MM-DD
+function today() { return new Date().toISOString().slice(0, 10); }
 
 // Auto-derive month (YYYY-MM) from a date string
 function monthFromDate(dateStr: string): string {
@@ -30,7 +79,7 @@ function monthFromDate(dateStr: string): string {
 }
 
 const blank = {
-  employee_id: '', month: '', supervisor_name: '', evaluation_date: '',
+  employee_id: '', month: '', supervisor_name: '', evaluation_date: today(),
   days_leave_taken: 0, attendance_score: 0, attendance_remark: '',
   late_minutes: 0, punctuality_score: 0, punctuality_remark: '',
   productivity_stars: 0, productivity_score: 0, productivity_remark: '',
@@ -76,7 +125,7 @@ export default function Evaluate() {
     enabled: !!editId,
   });
 
-  const [form, setForm] = useState<any>(blank);
+  const [form, setForm] = useState<any>({ ...blank, month: monthFromDate(today()) });
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -199,12 +248,13 @@ export default function Evaluate() {
           {/* Attendance */}
           <div className="score-section">
             <h4>📅 Attendance <span style={{ fontSize: '0.76rem', fontWeight: 400, color: 'var(--text3)' }}>/ 10</span></h4>
-            <div className="score-row">
-              <label>Days Leave Taken</label>
-              <input type="number" min="0" max="31" className="form-control" style={{ width: 80 }} value={form.days_leave_taken} onChange={e => update('days_leave_taken', parseInt(e.target.value) || 0)} />
-              <span style={{ fontWeight: 700, color: 'var(--red)', minWidth: 60 }}>Score: {form.attendance_score}/10</span>
-            </div>
-            <div className="form-group">
+            <SliderRating
+              label="Days Leave Taken" value={form.days_leave_taken}
+              onChange={v => update('days_leave_taken', v)}
+              min={0} max={15} step={1}
+              score={form.attendance_score}
+            />
+            <div className="form-group" style={{ marginTop: 12 }}>
               <label>Remark</label>
               <textarea className="form-control" rows={2} value={form.attendance_remark} onChange={e => update('attendance_remark', e.target.value)} />
             </div>
@@ -213,12 +263,13 @@ export default function Evaluate() {
           {/* Punctuality */}
           <div className="score-section">
             <h4>⏰ Punctuality <span style={{ fontSize: '0.76rem', fontWeight: 400, color: 'var(--text3)' }}>/ 10</span></h4>
-            <div className="score-row">
-              <label>Total Late Minutes</label>
-              <input type="number" min="0" className="form-control" style={{ width: 80 }} value={form.late_minutes} onChange={e => update('late_minutes', parseInt(e.target.value) || 0)} />
-              <span style={{ fontWeight: 700, color: 'var(--red)', minWidth: 60 }}>Score: {form.punctuality_score}/10</span>
-            </div>
-            <div className="form-group">
+            <SliderRating
+              label="Total Late Minutes" value={form.late_minutes}
+              onChange={v => update('late_minutes', v)}
+              min={0} max={120} step={5}
+              score={form.punctuality_score}
+            />
+            <div className="form-group" style={{ marginTop: 12 }}>
               <label>Remark</label>
               <textarea className="form-control" rows={2} value={form.punctuality_remark} onChange={e => update('punctuality_remark', e.target.value)} />
             </div>
@@ -227,12 +278,10 @@ export default function Evaluate() {
           {/* Productivity */}
           <div className="score-section">
             <h4>🏭 Productivity <span style={{ fontSize: '0.76rem', fontWeight: 400, color: 'var(--text3)' }}>/ 10</span></h4>
-            <div className="score-row">
-              <label>Star Rating</label>
-              <StarRating value={form.productivity_stars} onChange={v => update('productivity_stars', v)} />
-              <span style={{ fontWeight: 700, color: 'var(--red)', minWidth: 60 }}>Score: {form.productivity_score}/10</span>
-            </div>
-            <div className="form-group">
+            <label style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--text2)', display: 'block', marginBottom: 8 }}>Star Rating</label>
+            <StarRating value={form.productivity_stars} onChange={v => update('productivity_stars', v)} />
+            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#F59E0B', marginTop: 6 }}>Score: {form.productivity_score}/10</div>
+            <div className="form-group" style={{ marginTop: 10 }}>
               <label>Remark</label>
               <textarea className="form-control" rows={2} value={form.productivity_remark} onChange={e => update('productivity_remark', e.target.value)} />
             </div>
@@ -241,12 +290,10 @@ export default function Evaluate() {
           {/* Quality */}
           <div className="score-section">
             <h4>✅ Quality <span style={{ fontSize: '0.76rem', fontWeight: 400, color: 'var(--text3)' }}>/ 10</span></h4>
-            <div className="score-row">
-              <label>Star Rating</label>
-              <StarRating value={form.quality_stars} onChange={v => update('quality_stars', v)} />
-              <span style={{ fontWeight: 700, color: 'var(--red)', minWidth: 60 }}>Score: {form.quality_score}/10</span>
-            </div>
-            <div className="form-group">
+            <label style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--text2)', display: 'block', marginBottom: 8 }}>Star Rating</label>
+            <StarRating value={form.quality_stars} onChange={v => update('quality_stars', v)} />
+            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#F59E0B', marginTop: 6 }}>Score: {form.quality_score}/10</div>
+            <div className="form-group" style={{ marginTop: 10 }}>
               <label>Remark</label>
               <textarea className="form-control" rows={2} value={form.quality_remark} onChange={e => update('quality_remark', e.target.value)} />
             </div>
@@ -255,6 +302,7 @@ export default function Evaluate() {
           {/* Teamwork */}
           <div className="score-section">
             <h4>🤝 Team Work <span style={{ fontSize: '0.76rem', fontWeight: 400, color: 'var(--text3)' }}>/ 10</span></h4>
+            <div style={{ fontSize: '0.73rem', color: 'var(--text3)', marginBottom: 10 }}>Each checked item = 2.5 points</div>
             <div className="checkbox-group" style={{ marginBottom: 10 }}>
               {[
                 { key: 'team_respect_supervisors', label: 'Respects supervisors' },
@@ -262,11 +310,15 @@ export default function Evaluate() {
                 { key: 'team_follow_instructions', label: 'Follows instructions' },
                 { key: 'team_no_conflicts', label: 'No conflicts reported' },
               ].map(({ key, label }) => (
-                <label key={key} className="checkbox-item">
-                  <input type="checkbox" checked={form[key]} onChange={e => update(key, e.target.checked)} />
-                  {label}
+                <label key={key} className="checkbox-item" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={form[key]} onChange={e => update(key, e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--red)', cursor: 'pointer' }} />
+                  <span style={{ fontSize: '0.82rem' }}>{label}</span>
                 </label>
               ))}
+            </div>
+            {/* Visual score bar */}
+            <div style={{ background: '#F3F4F6', borderRadius: 8, height: 8, overflow: 'hidden', marginBottom: 6 }}>
+              <div style={{ width: `${(form.teamwork_score / 10) * 100}%`, height: '100%', background: form.teamwork_score >= 8 ? '#16a34a' : form.teamwork_score >= 5 ? '#F59E0B' : '#dc2626', transition: 'width 0.3s, background 0.3s', borderRadius: 8 }} />
             </div>
             <div style={{ fontWeight: 700, color: 'var(--red)', fontSize: '0.82rem', marginBottom: 10 }}>Score: {form.teamwork_score}/10</div>
             <div className="form-group">
@@ -278,12 +330,10 @@ export default function Evaluate() {
           {/* Initiative */}
           <div className="score-section">
             <h4>💡 Initiative & Learning <span style={{ fontSize: '0.76rem', fontWeight: 400, color: 'var(--text3)' }}>/ 10</span></h4>
-            <div className="score-row">
-              <label>Star Rating</label>
-              <StarRating value={form.initiative_stars} onChange={v => update('initiative_stars', v)} />
-              <span style={{ fontWeight: 700, color: 'var(--red)', minWidth: 60 }}>Score: {form.initiative_score}/10</span>
-            </div>
-            <div className="form-group">
+            <label style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--text2)', display: 'block', marginBottom: 8 }}>Star Rating</label>
+            <StarRating value={form.initiative_stars} onChange={v => update('initiative_stars', v)} />
+            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#F59E0B', marginTop: 6 }}>Score: {form.initiative_score}/10</div>
+            <div className="form-group" style={{ marginTop: 10 }}>
               <label>Remark</label>
               <textarea className="form-control" rows={2} value={form.initiative_remark} onChange={e => update('initiative_remark', e.target.value)} />
             </div>
@@ -293,19 +343,23 @@ export default function Evaluate() {
         {/* Discipline */}
         <div className="score-section" style={{ marginTop: 16 }}>
           <h4>🛡️ Discipline <span style={{ fontSize: '0.76rem', fontWeight: 400, color: 'var(--text3)' }}>/ 10 (avg of 3 sub-scores)</span></h4>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 24 }}>
             {[
-              { key: 'discipline_phone_stars', label: 'Phone Usage' },
-              { key: 'discipline_activities_stars', label: 'Unauthorized Activities' },
-              { key: 'discipline_behaviour_stars', label: 'Behaviour' },
+              { key: 'discipline_phone_stars', label: '📱 Phone Usage' },
+              { key: 'discipline_activities_stars', label: '🚫 Unauth. Activities' },
+              { key: 'discipline_behaviour_stars', label: '😊 Behaviour' },
             ].map(({ key, label }) => (
-              <div key={key}>
-                <label style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--text2)', display: 'block', marginBottom: 6 }}>{label}</label>
+              <div key={key} style={{ background: '#fff', borderRadius: 8, padding: 12, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text2)', marginBottom: 10 }}>{label}</div>
                 <StarRating value={form[key]} onChange={v => update(key, v)} />
+                <div style={{ fontSize: '0.72rem', color: 'var(--text3)', marginTop: 4 }}>{form[key]}/5 stars</div>
               </div>
             ))}
           </div>
-          <div style={{ fontWeight: 700, color: 'var(--red)', fontSize: '0.82rem', marginTop: 10, marginBottom: 10 }}>Score: {form.discipline_score}/10</div>
+          <div style={{ background: '#F3F4F6', borderRadius: 8, height: 8, overflow: 'hidden', margin: '14px 0 6px' }}>
+            <div style={{ width: `${(form.discipline_score / 10) * 100}%`, height: '100%', background: form.discipline_score >= 8 ? '#16a34a' : form.discipline_score >= 5 ? '#F59E0B' : '#dc2626', transition: 'width 0.3s', borderRadius: 8 }} />
+          </div>
+          <div style={{ fontWeight: 700, color: 'var(--red)', fontSize: '0.82rem', marginBottom: 10 }}>Score: {form.discipline_score}/10</div>
           <div className="form-group">
             <label>Remark</label>
             <textarea className="form-control" rows={2} value={form.discipline_remark} onChange={e => update('discipline_remark', e.target.value)} />
