@@ -7,7 +7,7 @@ import {
   LayoutGrid, List, FilePlus, Calendar, Plus, GitBranch, Building2, Scan,
   Tag, Package
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const nav = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -59,6 +59,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [salesOpen, setSalesOpen] = useState(onSales);
   const [ordersOpen, setOrdersOpen] = useState(onOrders);
   const [staffOpen, setStaffOpen] = useState(onStaff);
+  const [companyLogo, setCompanyLogo] = useState<string>('');
+  const [companyName, setCompanyName] = useState<string>('');
+
+  useEffect(() => {
+    // Load logo + name from settings (cached in localStorage for speed)
+    const cached = localStorage.getItem('pandora_company');
+    if (cached) { try { const c = JSON.parse(cached); setCompanyLogo(c.logo || ''); setCompanyName(c.name || ''); } catch (_) {} }
+    // Always refresh from API
+    fetch(`${import.meta.env.VITE_API_BASE || ''}/settings`)
+      .then(r => r.json())
+      .then((d: any) => {
+        const s = d.settings || d;
+        if (s) {
+          setCompanyLogo(s.company_logo || '');
+          setCompanyName(s.name || '');
+          localStorage.setItem('pandora_company', JSON.stringify({ logo: s.company_logo || '', name: s.name || '' }));
+        }
+      }).catch(() => {});
+  }, []);
 
   const isActive = (to: string) =>
     to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(to);
@@ -83,9 +102,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="layout">
       <aside className="sidebar">
-        <div className="sidebar-logo">
-          <h1>Pandora<br />Garments</h1>
-          <p>Management System v2</p>
+        <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 16px 16px' }}>
+          {companyLogo
+            ? <img src={companyLogo} alt="Logo" style={{ width: 44, height: 44, borderRadius: 10, objectFit: 'contain', background: '#fff', flexShrink: 0 }} />
+            : <div style={{ width: 44, height: 44, borderRadius: 10, background: 'var(--red)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: '1rem', flexShrink: 0, letterSpacing: '-0.02em' }}>PG</div>
+          }
+          <div>
+            <div style={{ fontWeight: 800, fontSize: '0.9rem', lineHeight: 1.2, color: 'var(--text)' }}>{companyName || 'Pandora Garments'}</div>
+            <div style={{ fontSize: '0.65rem', color: 'var(--text3)', marginTop: 2 }}>Management System</div>
+          </div>
         </div>
         <nav className="sidebar-nav">
           {/* Dashboard + Customers + Suppliers + Inventory + Purchases */}

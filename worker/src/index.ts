@@ -2,7 +2,7 @@ export interface Env { pandora_db: D1Database; ASSETS: Fetcher; }
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+  'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
@@ -699,7 +699,7 @@ export default {
       if (status) conditions.push(`o.status='${status}'`);
       if (search) conditions.push(`(c.name LIKE '%${search}%' OR o.order_no LIKE '%${search}%' OR o.product LIKE '%${search}%' OR s.invoice_no LIKE '%${search}%')`);
       if (conditions.length) where = ' WHERE ' + conditions.join(' AND ');
-      let q = `SELECT o.*, c.name customer_name, s.invoice_no FROM orders o LEFT JOIN customers c ON c.id=o.customer_id LEFT JOIN sales s ON s.id=o.sale_id${where} ORDER BY o.created_at DESC`;
+      let q = `SELECT o.*, c.name customer_name, c.phone customer_phone, c.mobile customer_mobile, s.invoice_no FROM orders o LEFT JOIN customers c ON c.id=o.customer_id LEFT JOIN sales s ON s.id=o.sale_id${where} ORDER BY o.created_at DESC`;
       const rows = await env.pandora_db.prepare(q).all();
       const [stats, trend] = await Promise.all([
         env.pandora_db.prepare(`
@@ -715,12 +715,13 @@ export default {
             COALESCE(SUM(CASE WHEN status NOT IN ('Cancelled') THEN total_amount ELSE 0 END),0) total_value
           FROM orders`).first<any>(),
         env.pandora_db.prepare(`
-          SELECT strftime('%Y-%m', order_date) m,
+          SELECT strftime('%d', order_date) day,
             COUNT(*) total,
             COUNT(CASE WHEN status='Cancelled' THEN 1 END) cancelled,
             COUNT(CASE WHEN status IN ('Delivered','Collected') THEN 1 END) completed
           FROM orders
-          GROUP BY m ORDER BY m DESC LIMIT 12`).all(),
+          WHERE strftime('%Y-%m', order_date) = strftime('%Y-%m', 'now')
+          GROUP BY day ORDER BY day ASC`).all(),
       ]);
       return json({ orders: rows.results, stats, trend: trend.results.reverse() });
     }
@@ -738,7 +739,7 @@ export default {
       for (const sz of (b.sizes||[])) {
         await env.pandora_db.prepare(`INSERT INTO order_sizes (order_id,size,qty,half,full,other,other_desc) VALUES (?,?,?,?,?,?,?)`).bind(oid,sz.size,sz.qty||0,sz.half||0,sz.full||0,sz.other||0,sz.other_desc||'').run();
       }
-      const order = await env.pandora_db.prepare('SELECT o.*,c.name customer_name FROM orders o LEFT JOIN customers c ON c.id=o.customer_id WHERE o.id=?').bind(oid).first();
+      const order = await env.pandora_db.prepare('SELECT o.*,c.name customer_name,c.phone customer_phone,c.mobile customer_mobile,s.invoice_no FROM orders o LEFT JOIN customers c ON c.id=o.customer_id LEFT JOIN sales s ON s.id=o.sale_id WHERE o.id=?').bind(oid).first();
       const sizes = await env.pandora_db.prepare('SELECT * FROM order_sizes WHERE order_id=?').bind(oid).all();
       return json({ order, sizes: sizes.results }, 201);
     }
@@ -746,10 +747,19 @@ export default {
     if (ordMatch) {
       const id = Number(ordMatch[1]);
       if (method === 'GET') {
-        const o = await env.pandora_db.prepare('SELECT o.*,c.name customer_name FROM orders o LEFT JOIN customers c ON c.id=o.customer_id WHERE o.id=?').bind(id).first();
+        const o = await env.pandora_db.prepare('SELECT o.*,c.name customer_name,c.phone customer_phone,c.mobile customer_mobile,s.invoice_no FROM orders o LEFT JOIN customers c ON c.id=o.customer_id LEFT JOIN sales s ON s.id=o.sale_id WHERE o.id=?').bind(id).first();
         if (!o) return err('Not found', 404);
         const sizes = await env.pandora_db.prepare('SELECT * FROM order_sizes WHERE order_id=?').bind(id).all();
         return json({ order: o, sizes: sizes.results });
+      }
+      if (method === 'PATCH') {
+        const b = await request.json() as any;
+        if (b.status !== undefined) await env.pandora_db.prepare(`UPDATE orders SET status=? WHERE id=?`).bind(b.status, id).run();
+        if (b.production_status !== undefined) await env.pandora_db.prepare(`UPDATE orders SET production_status=? WHERE id=?`).bind(b.production_status, id).run();
+        if (b.progress !== undefined) await env.pandora_db.prepare(`UPDATE orders SET progress=? WHERE id=?`).bind(b.progress, id).run();
+        const order = await env.pandora_db.prepare('SELECT o.*,c.name customer_name,c.phone customer_phone,c.mobile customer_mobile,s.invoice_no FROM orders o LEFT JOIN customers c ON c.id=o.customer_id LEFT JOIN sales s ON s.id=o.sale_id WHERE o.id=?').bind(id).first();
+        const sizes = await env.pandora_db.prepare('SELECT * FROM order_sizes WHERE order_id=?').bind(id).all();
+        return json({ order, sizes: sizes.results });
       }
       if (method === 'PUT') {
         const b = await request.json() as any;
@@ -759,7 +769,7 @@ export default {
         for (const sz of (b.sizes||[])) {
           await env.pandora_db.prepare(`INSERT INTO order_sizes (order_id,size,qty,half,full,other,other_desc) VALUES (?,?,?,?,?,?,?)`).bind(id,sz.size,sz.qty||0,sz.half||0,sz.full||0,sz.other||0,sz.other_desc||'').run();
         }
-        const order = await env.pandora_db.prepare('SELECT o.*,c.name customer_name FROM orders o LEFT JOIN customers c ON c.id=o.customer_id WHERE o.id=?').bind(id).first();
+        const order = await env.pandora_db.prepare('SELECT o.*,c.name customer_name,c.phone customer_phone,c.mobile customer_mobile,s.invoice_no FROM orders o LEFT JOIN customers c ON c.id=o.customer_id LEFT JOIN sales s ON s.id=o.sale_id WHERE o.id=?').bind(id).first();
         const sizes = await env.pandora_db.prepare('SELECT * FROM order_sizes WHERE order_id=?').bind(id).all();
         return json({ order, sizes: sizes.results });
       }
@@ -817,6 +827,12 @@ export default {
       await env.pandora_db.prepare('DELETE FROM departments WHERE id=?').bind(id).run();
       return json({ message: 'Deleted' });
     }
+    if (path.match(/^\/departments\/(\d+)$/) && method === 'PUT') {
+      const id = Number(path.split('/')[2]);
+      const b = await request.json() as any;
+      await env.pandora_db.prepare('UPDATE departments SET name=? WHERE id=?').bind(b.name, id).run();
+      return json({ department: await env.pandora_db.prepare('SELECT * FROM departments WHERE id=?').bind(id).first() });
+    }
 
     // ─── TEAMS ───────────────────────────────────────────────────────────────
     if (method === 'GET' && path === '/teams') {
@@ -833,8 +849,73 @@ export default {
       await env.pandora_db.prepare('DELETE FROM teams WHERE id=?').bind(id).run();
       return json({ message: 'Deleted' });
     }
+    if (path.match(/^\/teams\/(\d+)$/) && method === 'PUT') {
+      const id = Number(path.split('/')[2]);
+      const b = await request.json() as any;
+      await env.pandora_db.prepare('UPDATE teams SET name=?,department_id=? WHERE id=?').bind(b.name, b.department_id||null, id).run();
+      return json({ team: await env.pandora_db.prepare('SELECT t.*,d.name dept_name FROM teams t LEFT JOIN departments d ON d.id=t.department_id WHERE t.id=?').bind(id).first() });
+    }
+
+    // ─── EXPENSE CATEGORIES ──────────────────────────────────────────────────
+    if (path === '/expense-categories' || path.startsWith('/expense-categories/')) {
+      await env.pandora_db.prepare(`CREATE TABLE IF NOT EXISTS expense_categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE)`).run();
+    }
+    if (method === 'GET' && path === '/expense-categories') {
+      const rows = await env.pandora_db.prepare('SELECT * FROM expense_categories ORDER BY name').all();
+      return json({ categories: rows.results });
+    }
+    if (method === 'POST' && path === '/expense-categories') {
+      const b = await request.json() as any;
+      if (!b.name) return err('Name required');
+      const r = await env.pandora_db.prepare('INSERT INTO expense_categories (name) VALUES (?)').bind(b.name.trim()).run();
+      return json({ category: await env.pandora_db.prepare('SELECT * FROM expense_categories WHERE id=?').bind(r.meta.last_row_id).first() }, 201);
+    }
+    const ecMatch = path.match(/^\/expense-categories\/(\d+)$/);
+    if (ecMatch) {
+      const id = Number(ecMatch[1]);
+      if (method === 'PUT') {
+        const b = await request.json() as any;
+        await env.pandora_db.prepare('UPDATE expense_categories SET name=? WHERE id=?').bind(b.name.trim(), id).run();
+        return json({ category: await env.pandora_db.prepare('SELECT * FROM expense_categories WHERE id=?').bind(id).first() });
+      }
+      if (method === 'DELETE') {
+        await env.pandora_db.prepare('DELETE FROM expense_categories WHERE id=?').bind(id).run();
+        return json({ message: 'Deleted' });
+      }
+    }
+
+    // ─── EXPENSE PAYERS ──────────────────────────────────────────────────────
+    if (path === '/expense-payers' || path.startsWith('/expense-payers/')) {
+      await env.pandora_db.prepare(`CREATE TABLE IF NOT EXISTS expense_payers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE)`).run();
+    }
+    if (method === 'GET' && path === '/expense-payers') {
+      const rows = await env.pandora_db.prepare('SELECT * FROM expense_payers ORDER BY name').all();
+      return json({ payers: rows.results });
+    }
+    if (method === 'POST' && path === '/expense-payers') {
+      const b = await request.json() as any;
+      if (!b.name) return err('Name required');
+      const r = await env.pandora_db.prepare('INSERT INTO expense_payers (name) VALUES (?)').bind(b.name.trim()).run();
+      return json({ payer: await env.pandora_db.prepare('SELECT * FROM expense_payers WHERE id=?').bind(r.meta.last_row_id).first() }, 201);
+    }
+    const epMatch = path.match(/^\/expense-payers\/(\d+)$/);
+    if (epMatch) {
+      const id = Number(epMatch[1]);
+      if (method === 'PUT') {
+        const b = await request.json() as any;
+        await env.pandora_db.prepare('UPDATE expense_payers SET name=? WHERE id=?').bind(b.name.trim(), id).run();
+        return json({ payer: await env.pandora_db.prepare('SELECT * FROM expense_payers WHERE id=?').bind(id).first() });
+      }
+      if (method === 'DELETE') {
+        await env.pandora_db.prepare('DELETE FROM expense_payers WHERE id=?').bind(id).run();
+        return json({ message: 'Deleted' });
+      }
+    }
 
     // ─── EXPENSES ────────────────────────────────────────────────────────────
+    // Self-migrate: add paid_by column if missing
+    try { await env.pandora_db.prepare('ALTER TABLE expenses ADD COLUMN paid_by TEXT').run(); } catch (_) {}
+
     if (method === 'GET' && path === '/expenses') {
       const month = url.searchParams.get('month');
       let q = 'SELECT * FROM expenses';
@@ -846,9 +927,9 @@ export default {
     }
     if (method === 'POST' && path === '/expenses') {
       const b = await request.json() as any;
-      if (!b.expense_date || !b.category || !b.amount) return err('Date, category, amount required');
-      const r = await env.pandora_db.prepare(`INSERT INTO expenses (expense_date,category,amount,notes) VALUES (?,?,?,?)`)
-        .bind(b.expense_date,b.category,b.amount,b.notes||null).run();
+      if (!b.expense_date || !b.category || b.amount == null || b.amount === '') return err('Date, category, amount required');
+      const r = await env.pandora_db.prepare(`INSERT INTO expenses (expense_date,category,amount,notes,paid_by) VALUES (?,?,?,?,?)`)
+        .bind(b.expense_date,b.category,b.amount,b.notes||null,b.paid_by||null).run();
       return json({ expense: await env.pandora_db.prepare('SELECT * FROM expenses WHERE id=?').bind(r.meta.last_row_id).first() }, 201);
     }
     const expMatch = path.match(/^\/expenses\/(\d+)$/);
@@ -856,8 +937,8 @@ export default {
       const id = Number(expMatch[1]);
       if (method === 'PUT') {
         const b = await request.json() as any;
-        await env.pandora_db.prepare(`UPDATE expenses SET expense_date=?,category=?,amount=?,notes=? WHERE id=?`)
-          .bind(b.expense_date,b.category,b.amount,b.notes||null,id).run();
+        await env.pandora_db.prepare(`UPDATE expenses SET expense_date=?,category=?,amount=?,notes=?,paid_by=? WHERE id=?`)
+          .bind(b.expense_date,b.category,b.amount,b.notes||null,b.paid_by||null,id).run();
         return json({ expense: await env.pandora_db.prepare('SELECT * FROM expenses WHERE id=?').bind(id).first() });
       }
       if (method === 'DELETE') {
@@ -868,12 +949,34 @@ export default {
 
     // ─── SETTINGS ────────────────────────────────────────────────────────────
     if (path === '/settings') {
-      if (method === 'GET') return json({ settings: await env.pandora_db.prepare('SELECT * FROM company_settings WHERE id=1').first() });
+      // Ensure app_settings KV table exists (self-migrating)
+      await env.pandora_db.prepare(`CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)`).run();
+
+      if (method === 'GET') {
+        const cs = await env.pandora_db.prepare('SELECT * FROM company_settings WHERE id=1').first<any>();
+        const kvRows = await env.pandora_db.prepare('SELECT key, value FROM app_settings').all<any>();
+        const kv: Record<string,string> = {};
+        for (const r of (kvRows.results || [])) kv[r.key] = r.value;
+        return json({ settings: { ...cs, ...kv } });
+      }
       if (method === 'PUT') {
         const b = await request.json() as any;
-        await env.pandora_db.prepare(`UPDATE company_settings SET name=?,address=?,phone=?,email=?,order_prefix=?,invoice_prefix=?,quotation_prefix=? WHERE id=1`)
-          .bind(b.name,b.address||null,b.phone||null,b.email||null,b.order_prefix||'ORD',b.invoice_prefix||'INV',b.quotation_prefix||'QUO').run();
-        return json({ settings: await env.pandora_db.prepare('SELECT * FROM company_settings WHERE id=1').first() });
+        // Core company_settings columns
+        await env.pandora_db.prepare(`UPDATE company_settings SET name=?,address=?,phone=?,email=?,order_prefix=?,invoice_prefix=?,quotation_prefix=?,order_seq=?,invoice_seq=?,quotation_seq=? WHERE id=1`)
+          .bind(b.name,b.address||null,b.phone||null,b.email||null,b.order_prefix||'ORD',b.invoice_prefix||'INV',b.quotation_prefix||'QUO',Number(b.order_seq)||1,Number(b.invoice_seq)||1,Number(b.quotation_seq)||1).run();
+        // Extra settings → app_settings KV
+        const extraKeys = ['currency_symbol','date_format','print_paper_size','print_show_images','print_show_elements','print_show_sizes','cal_capacity','default_order_status','wa_enabled','wa_country_code','wa_btn_position','wa_auto_confirmed','wa_auto_ready','wa_tpl_order_confirmation','wa_tpl_order_ready','wa_tpl_order_delivered','wa_tpl_payment_reminder'];
+        for (const k of extraKeys) {
+          if (b[k] !== undefined) {
+            await env.pandora_db.prepare(`INSERT INTO app_settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).bind(k, String(b[k])).run();
+          }
+        }
+        // Return merged settings
+        const cs = await env.pandora_db.prepare('SELECT * FROM company_settings WHERE id=1').first<any>();
+        const kvRows = await env.pandora_db.prepare('SELECT key, value FROM app_settings').all<any>();
+        const kv: Record<string,string> = {};
+        for (const r of (kvRows.results || [])) kv[r.key] = r.value;
+        return json({ settings: { ...cs, ...kv } });
       }
     }
 
@@ -996,7 +1099,19 @@ export default {
       }
       // Sales reports
       if (type === 'sales-report') {
-        const rows = await env.pandora_db.prepare(`SELECT s.*,c.name customer_name FROM sales s LEFT JOIN customers c ON c.id=s.customer_id ${month?`WHERE strftime('%Y-%m',sale_date)='${month}'`:''} ORDER BY sale_date DESC`).all();
+        const from = url.searchParams.get('from');
+        const to = url.searchParams.get('to');
+        let where = '';
+        if (from && to) where = `WHERE s.sale_date >= '${from}' AND s.sale_date <= '${to}'`;
+        else if (month) where = `WHERE strftime('%Y-%m',s.sale_date)='${month}'`;
+        const rows = await env.pandora_db.prepare(
+          `SELECT s.*, c.name customer_name,
+            COALESCE(s.amount_paid,0) amount_paid,
+            ROUND(COALESCE(s.total_amount,0) - COALESCE(s.amount_paid,0), 2) due_amount,
+            CAST((julianday('now') - julianday(s.sale_date)) AS INTEGER) days_since
+           FROM sales s LEFT JOIN customers c ON c.id=s.customer_id
+           ${where} ORDER BY s.sale_date DESC`
+        ).all();
         return json({ data: rows.results });
       }
       if (type === 'purchase-report') {
@@ -1100,7 +1215,7 @@ export default {
       '/items', '/inventory', '/stock-history', '/purchases', '/purchase-items',
       '/sales', '/sale-items', '/quotations', '/quotation-items', '/orders',
       '/staff', '/teams', '/departments', '/employees', '/evaluations',
-      '/expenses', '/reports', '/settings', '/company-settings', '/price-groups',
+      '/expenses', '/expense-categories', '/reports', '/settings', '/company-settings', '/price-groups',
       '/addon-items', '/order-',
     ];
     if (API_PREFIXES.some(p => path === p || path.startsWith(p + '/') || path.startsWith(p))) {

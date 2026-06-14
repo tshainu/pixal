@@ -198,7 +198,7 @@ function AddStaffTab() {
         <div className="form-row">
           <div className="form-group">
             <label>Full Name *</label>
-            <input className="form-control" placeholder="e.g. Amali Perera" value={form.name || ''} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+            <input className="form-control" placeholder="e.g. Mr. Joseph Vijai" value={form.name || ''} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
           </div>
           <div className="form-group">
             <label>Position / Role</label>

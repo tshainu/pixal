@@ -236,7 +236,7 @@ tr:hover td { background: #FAFAFA; }
 .loading { display: flex; align-items: center; justify-content: center; padding: 48px; color: var(--text3); font-size: 0.85rem; }
 
 /* ── Tabs ── */
-.tabs { display: flex; gap: 4px; background: var(--bg); padding: 4px; border-radius: 8px; margin-bottom: 20px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; background: var(--bg); padding: 4px; border-radius: 8px; margin-bottom: 20px; }
 .tab { padding: 7px 14px; border-radius: 6px; font-size: 0.8rem; font-weight: 500; cursor: pointer; border: none; background: transparent; color: var(--text2); font-family: inherit; transition: all 0.15s; }
 .tab.active { background: var(--surface); color: var(--red); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
 
@@ -296,7 +296,7 @@ tr:hover td { background: #FAFAFA; }
   border-bottom: 0px solid transparent;
   border-left: 14px solid #C0001A;
 }
-.ps-logo-pandora { font-size: 18pt; font-weight: 900; letter-spacing: 3px; line-height: 1; }
+.ps-logo-pandora { font-size: 18pt; font-weight: 900; letter-spacing: 3px; line-height: 1; color: #111; }
 .ps-logo-garments { font-size: 6pt; letter-spacing: 5px; opacity: 0.85; margin-top: 3px; text-transform: uppercase; }
 
 .ps-header-center {
@@ -308,10 +308,10 @@ tr:hover td { background: #FAFAFA; }
   padding: 10px 20px;
 }
 .ps-order-sheet-title {
-  font-size: 22pt;
+  font-size: 16pt;
   font-weight: 900;
   letter-spacing: 8px;
-  color: #fff;
+  color: #111;
   text-transform: uppercase;
   line-height: 1;
 }
@@ -336,6 +336,7 @@ tr:hover td { background: #FAFAFA; }
 .ps-meta-row { display: flex; gap: 8px; align-items: baseline; }
 .ps-meta-lbl { font-size: 6pt; font-weight: 700; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; min-width: 85px; }
 .ps-meta-val { font-size: 8.5pt; font-weight: 800; color: #fff; }
+.ps-meta-val-dark { color: #111 !important; }
 
 /* RED ACCENT STRIP */
 .ps-accent-strip {
@@ -357,33 +358,34 @@ tr:hover td { background: #FAFAFA; }
   flex-wrap: wrap;
 }
 .ps-customer-name-lbl { font-size: 7pt; font-weight: 800; color: #aaa; text-transform: uppercase; letter-spacing: 0.1em; margin-right: 8px; }
-.ps-customer-name-val { font-size: 13pt; font-weight: 900; color: #C0001A; letter-spacing: 1px; flex: 1; }
+.ps-customer-name-val { font-size: 10pt; font-weight: 800; color: #C0001A; letter-spacing: 0.5px; flex: 1; }
 .ps-customer-meta { display: flex; gap: 20px; }
 .ps-customer-meta-item { display: flex; flex-direction: column; align-items: flex-end; }
 .ps-customer-meta-lbl { font-size: 6pt; font-weight: 700; color: #aaa; text-transform: uppercase; letter-spacing: 0.08em; }
 .ps-customer-meta-val { font-size: 8.5pt; font-weight: 800; color: #111; }
+.ps-fabric-big { font-size: 12pt !important; font-weight: 900 !important; color: #1a1a2e !important; letter-spacing: 0.5px; }
 
 /* SPECS PILLS ROW */
 .ps-specsbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 .ps-spec-pill {
   display: flex;
   flex-direction: column;
-  padding: 4px 10px;
+  padding: 7px 16px;
   background: #f4f4f4;
-  border: 1px solid #ddd;
-  border-radius: 20px;
-  min-width: 70px;
+  border: 1.5px solid #ddd;
+  border-radius: 24px;
+  min-width: 90px;
 }
-.ps-spec-lbl { font-size: 5.5pt; font-weight: 800; color: #aaa; text-transform: uppercase; letter-spacing: 0.1em; }
-.ps-spec-val { font-size: 8pt; font-weight: 700; color: #111; margin-top: 1px; }
-.ps-spec-pill-highlight { background: #fff0f2; border-color: #C0001A; }
+.ps-spec-lbl { font-size: 6.5pt; font-weight: 800; color: #aaa; text-transform: uppercase; letter-spacing: 0.12em; }
+.ps-spec-val { font-size: 10.5pt; font-weight: 700; color: #111; margin-top: 2px; }
+.ps-spec-pill-highlight { background: #fff0f2; border-color: #C0001A; border-width: 2px; }
 .ps-spec-pill-highlight .ps-spec-lbl { color: #C0001A; }
-.ps-spec-pill-highlight .ps-spec-val { color: #C0001A; font-weight: 900; }
+.ps-spec-pill-highlight .ps-spec-val { color: #C0001A; font-weight: 900; font-size: 11.5pt; }
 
 /* BODY LAYOUT */
 .ps-body {
@@ -577,26 +579,17 @@ tr:hover td { background: #FAFAFA; }
 .ps-row-alt td { background: #FAFAFA; }
 .ps-infobar { display: none; }
 
+/* Hide print-only on screen */
+.print-only { display: none; }
+
 /* ── Print styles ── */
 @media print {
   @page { size: A4 portrait; margin: 12mm 14mm; }
 
-  body * { visibility: hidden; }
+  /* Hide every direct child of body except print-only */
+  body.printing-order > * { display: none !important; }
+  body.printing-order > .print-only { display: block !important; position: static !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
 
-  .print-only,
-  .print-only * { visibility: visible !important; }
-  .print-only { display: block !important; }
-
-  /* Preserve native table/flex layout in print — do NOT force block */
-  .print-only table { display: table !important; }
-  .print-only thead { display: table-header-group !important; }
-  .print-only tbody { display: table-row-group !important; }
-  .print-only tfoot { display: table-footer-group !important; }
-  .print-only tr { display: table-row !important; }
-  .print-only th,
-  .print-only td { display: table-cell !important; }
-
-  .print-page { visibility: visible !important; position: static; width: 100%; }
   .screen-only { display: none !important; }
 
   /* ── Print page base ── */
@@ -612,15 +605,16 @@ tr:hover td { background: #FAFAFA; }
   .ps-header { display: flex !important; align-items: stretch; background: #1a1a2e !important; border-radius: 0; overflow: visible; margin-bottom: 0; }
   .ps-logo { background: #C0001A !important; color: #fff; padding: 14px 20px; display: flex !important; flex-direction: column; justify-content: center; align-items: center; min-width: 130px; }
   .ps-logo::after { display: none; }
-  .ps-logo-pandora { font-size: 18pt; font-weight: 900; letter-spacing: 3px; line-height: 1; }
+  .ps-logo-pandora { font-size: 18pt; font-weight: 900; letter-spacing: 3px; line-height: 1; color: #111; }
   .ps-logo-garments { font-size: 6pt; letter-spacing: 5px; opacity: 0.85; margin-top: 3px; text-transform: uppercase; }
   .ps-header-center { flex: 1; display: flex !important; flex-direction: column; align-items: center; justify-content: center; padding: 10px 20px; }
-  .ps-order-sheet-title { font-size: 22pt; font-weight: 900; letter-spacing: 8px; color: #fff; text-transform: uppercase; line-height: 1; }
+  .ps-order-sheet-title { font-size: 16pt; font-weight: 900; letter-spacing: 8px; color: #111; text-transform: uppercase; line-height: 1; }
   .ps-product-name { font-size: 8pt; font-weight: 600; color: rgba(255,255,255,0.55); margin-top: 4px; letter-spacing: 2px; text-transform: uppercase; }
   .ps-header-meta { border-left: 1px solid rgba(255,255,255,0.15) !important; padding: 10px 16px; display: flex !important; flex-direction: column; justify-content: center; gap: 6px; min-width: 175px; }
   .ps-meta-row { display: flex !important; gap: 8px; align-items: baseline; }
   .ps-meta-lbl { font-size: 6pt; font-weight: 700; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; min-width: 85px; }
   .ps-meta-val { font-size: 8.5pt; font-weight: 800; color: #fff; }
+  .ps-meta-val-dark { color: #111 !important; }
 
   /* ACCENT STRIP */
   .ps-accent-strip { height: 4px; background: #C0001A; margin-bottom: 6px; }
@@ -628,20 +622,21 @@ tr:hover td { background: #FAFAFA; }
   /* CUSTOMER BAR */
   .ps-customerbar { display: flex !important; align-items: center; background: #f8f8f8; border: 1.5px solid #e0e0e0; border-left: 5px solid #C0001A; padding: 8px 14px; margin-bottom: 6px; gap: 0; flex-wrap: wrap; }
   .ps-customer-name-lbl { font-size: 7pt; font-weight: 800; color: #aaa; text-transform: uppercase; letter-spacing: 0.1em; margin-right: 8px; }
-  .ps-customer-name-val { font-size: 13pt; font-weight: 900; color: #C0001A; letter-spacing: 1px; flex: 1; }
+  .ps-customer-name-val { font-size: 10pt; font-weight: 800; color: #C0001A; letter-spacing: 0.5px; flex: 1; }
   .ps-customer-meta { display: flex !important; gap: 20px; }
   .ps-customer-meta-item { display: flex !important; flex-direction: column; align-items: flex-end; }
   .ps-customer-meta-lbl { font-size: 6pt; font-weight: 700; color: #aaa; text-transform: uppercase; letter-spacing: 0.08em; }
   .ps-customer-meta-val { font-size: 8.5pt; font-weight: 800; color: #111; }
+  .ps-fabric-big { font-size: 12pt !important; font-weight: 900 !important; color: #1a1a2e !important; letter-spacing: 0.5px; }
 
   /* SPECS PILLS */
-  .ps-specsbar { display: flex !important; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; border: none; }
-  .ps-spec-pill { display: flex !important; flex-direction: column; padding: 4px 10px; background: #f4f4f4; border: 1px solid #ddd; border-radius: 20px; min-width: 70px; }
-  .ps-spec-lbl { font-size: 5.5pt; font-weight: 800; color: #aaa; text-transform: uppercase; letter-spacing: 0.1em; }
-  .ps-spec-val { font-size: 8pt; font-weight: 700; color: #111; margin-top: 1px; }
-  .ps-spec-pill-highlight { background: #fff0f2 !important; border-color: #C0001A !important; }
+  .ps-specsbar { display: flex !important; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; border: none; }
+  .ps-spec-pill { display: flex !important; flex-direction: column; padding: 7px 16px; background: #f4f4f4; border: 1.5px solid #ddd; border-radius: 24px; min-width: 90px; }
+  .ps-spec-lbl { font-size: 6.5pt; font-weight: 800; color: #aaa; text-transform: uppercase; letter-spacing: 0.12em; }
+  .ps-spec-val { font-size: 10.5pt; font-weight: 700; color: #111; margin-top: 2px; }
+  .ps-spec-pill-highlight { background: #fff0f2 !important; border-color: #C0001A !important; border-width: 2px !important; }
   .ps-spec-pill-highlight .ps-spec-lbl { color: #C0001A; }
-  .ps-spec-pill-highlight .ps-spec-val { color: #C0001A; font-weight: 900; }
+  .ps-spec-pill-highlight .ps-spec-val { color: #C0001A; font-weight: 900; font-size: 11.5pt; }
 
   /* BODY */
   .ps-body { display: flex !important; gap: 14px; margin-bottom: 8px; align-items: flex-start; }

@@ -35,7 +35,7 @@ export const api = {
   // ── Reports ──────────────────────────────────────────────
   getReport: (type: string, params?: Record<string, string>) => {
     const qs = new URLSearchParams(params || {});
-    return req(`/reports/${type}?${qs}`).then(d => d.data);
+    return req(`/reports/${type}?${qs}`);
   },
 
   // ── Customers ────────────────────────────────────────────
@@ -140,6 +140,7 @@ export const api = {
   getOrder: (id: number) => req(`/orders/${id}`), // returns { order, sizes }
   createOrder: (data: object) => req('/orders', 'POST', data),
   updateOrder: (id: number, data: object) => req(`/orders/${id}`, 'PUT', data),
+  patchOrder: (id: number, data: object) => req(`/orders/${id}`, 'PATCH', data),
   deleteOrder: (id: number) => req(`/orders/${id}`, 'DELETE'),
 
   // ── Staff ────────────────────────────────────────────────
@@ -176,6 +177,14 @@ export const api = {
   createExpense: (data: object) => req('/expenses', 'POST', data).then(d => d.expense),
   updateExpense: (id: number, data: object) => req(`/expenses/${id}`, 'PUT', data).then(d => d.expense),
   deleteExpense: (id: number) => req(`/expenses/${id}`, 'DELETE'),
+  getExpenseCategories: () => req('/expense-categories').then(d => d.categories),
+  createExpenseCategory: (name: string) => req('/expense-categories', 'POST', { name }).then(d => d.category),
+  updateExpenseCategory: (id: number, name: string) => req(`/expense-categories/${id}`, 'PUT', { name }).then(d => d.category),
+  deleteExpenseCategory: (id: number) => req(`/expense-categories/${id}`, 'DELETE'),
+  getExpensePayers: () => req('/expense-payers').then(d => d.payers),
+  createExpensePayer: (name: string) => req('/expense-payers', 'POST', { name }).then(d => d.payer),
+  updateExpensePayer: (id: number, name: string) => req(`/expense-payers/${id}`, 'PUT', { name }).then(d => d.payer),
+  deleteExpensePayer: (id: number) => req(`/expense-payers/${id}`, 'DELETE'),
 
   // ── Settings ─────────────────────────────────────────────
   getSettings: () => req('/settings').then(d => d.settings),

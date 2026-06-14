@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -8,7 +9,7 @@ import {
   LayoutGrid, List, FilePlus, FileCheck,
   AlertTriangle, TrendingUp, Clock, CheckCircle, XCircle,
   ChevronLeft, ChevronRight, ChevronDown, Edit2, Printer, UserPlus, Minus,
-  Shirt, Users, StickyNote,
+  Shirt, Users, StickyNote, Settings,
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -31,6 +32,7 @@ type NotesData = {
 };
 type Order = {
   id: number; order_no: string; customer_id: number; customer_name: string;
+  customer_phone?: string; customer_mobile?: string;
   order_date: string; delivery_date: string; status: string; production_status: string;
   sale_id?: number; invoice_no?: string;
   progress: number; product: string; design_reference: string; fabric_details: string;
@@ -43,18 +45,29 @@ type Stats = {
   completed: number; uncollected: number; cancelled: number; overdue: number;
   total_value: number;
 };
-type TrendPoint = { m: string; total: number; cancelled: number; completed: number };
+type TrendPoint = { day: string; total: number; cancelled: number; completed: number };
 
 // ─── Constants ───────────────────────────────────────────────────────────────
-const STATUSES = ['New', 'Confirmed', 'In Progress', 'Ready', 'Delivered', 'Collected', 'Cancelled'];
+const STATUSES = ['New', 'Confirmed', 'In Progress', 'Ready', 'Delivered', 'Cancelled'];
 const STATUS_COLOR: Record<string, string> = {
-  New: '#6366f1', Confirmed: '#0ea5e9', 'In Progress': '#f59e0b',
-  Ready: '#10b981', Delivered: '#10b981', Collected: '#22c55e', Cancelled: '#ef4444',
+  New:          '#6366f1', // indigo
+  Confirmed:    '#0ea5e9', // sky blue
+  'In Progress':'#f59e0b', // amber
+  Ready:        '#10b981', // emerald
+  Delivered:    '#22c55e', // green
+  Cancelled:    '#ef4444', // red
+};
+const STATUS_BG: Record<string, string> = {
+  New:          '#eef2ff',
+  Confirmed:    '#e0f2fe',
+  'In Progress':'#fef3c7',
+  Ready:        '#d1fae5',
+  Delivered:    '#dcfce7',
+  Cancelled:    '#fee2e2',
 };
 const STATUS_MAP: Record<string, string> = {
   New: 'badge-average', Confirmed: 'badge-verygood', 'In Progress': 'badge-verygood',
-  Ready: 'badge-excellent', Delivered: 'badge-excellent', Collected: 'badge-excellent',
-  Cancelled: 'badge-needs',
+  Ready: 'badge-excellent', Delivered: 'badge-excellent', Cancelled: 'badge-needs',
 };
 const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'Free Size', 'KIDS S', 'KIDS M', 'KIDS L', 'KIDS XL'];
 // const SLEEVE_OPTS = ['Full', 'Half', '3/4', 'Sleeveless']; // managed via DB
@@ -219,6 +232,44 @@ function orderToForm(o: Order): FormShape {
   };
 }
 
+// ─── WhatsApp auto-send helper ────────────────────────────────────────────────
+const DEFAULT_WA_TEMPLATES: Record<string, string> = {
+  order_confirmation: `Hello {{customer_name}},\n\nThank you for your order! 🎉\n\n*Order No:* {{order_no}}\n*Date:* {{order_date}}\n*Delivery Date:* {{delivery_date}}\n*Qty:* {{total_qty}} pcs\n*Total:* LKR {{total_amount}}\n\nWe will keep you updated on your order progress.\n\n{{company_name}}`,
+  order_ready: `Hello {{customer_name}},\n\nGreat news! 🎊 Your order is ready for pickup/delivery.\n\n*Order No:* {{order_no}}\n*Qty:* {{total_qty}} pcs\n\nPlease contact us to arrange delivery.\n📞 {{company_phone}}\n\n{{company_name}}`,
+};
+
+function buildWALink(order: Order, templateKey: string, settings: Record<string, string>): string | null {
+  const rawPhone = order.customer_phone || order.customer_mobile || '';
+  if (!rawPhone) return null;
+  const countryCode = settings.wa_country_code || '94';
+  const digits = rawPhone.replace(/\D/g, '');
+  const phone = digits.startsWith('0') ? countryCode + digits.slice(1) : digits.startsWith(countryCode) ? digits : countryCode + digits;
+  const tplKey = `wa_tpl_${templateKey}`;
+  const template = settings[tplKey] || DEFAULT_WA_TEMPLATES[templateKey] || '';
+  const msg = template
+    .replace(/{{customer_name}}/g, order.customer_name || '')
+    .replace(/{{order_no}}/g, order.order_no || '')
+    .replace(/{{order_date}}/g, order.order_date || '')
+    .replace(/{{delivery_date}}/g, order.delivery_date || '')
+    .replace(/{{total_qty}}/g, String(order.total_qty || ''))
+    .replace(/{{total_amount}}/g, String(order.total_amount || ''))
+    .replace(/{{company_name}}/g, settings.name || '')
+    .replace(/{{company_phone}}/g, settings.phone || '');
+  return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+}
+
+function triggerWAIfEnabled(order: Order, newStatus: string, settings: Record<string, string>) {
+  if (settings.wa_enabled !== 'true') return;
+  if (newStatus === 'Confirmed' && settings.wa_auto_confirmed === 'true') {
+    const link = buildWALink(order, 'order_confirmation', settings);
+    if (link) window.open(link, '_blank');
+  }
+  if (newStatus === 'Ready' && settings.wa_auto_ready === 'true') {
+    const link = buildWALink(order, 'order_ready', settings);
+    if (link) window.open(link, '_blank');
+  }
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function OrderManagement() {
   const loc = useLocation();
@@ -246,20 +297,26 @@ export default function OrderManagement() {
   const trend: TrendPoint[] = ordersData?.trend || [];
 
   const { data: customers = [] } = useQuery({ queryKey: ['customers'], queryFn: () => api.getCustomers() });
+  const { data: settings = {} } = useQuery<Record<string, string>>({ queryKey: ['settings'], queryFn: () => api.getSettings() });
 
   const save = useMutation({
     mutationFn: (d: object) => api.createOrder(d),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['orders'] }); go('list'); },
+    onError: (e: any) => alert('Save failed: ' + (e?.message || 'Unknown error')),
   });
 
   const updateOrder = useMutation({
     mutationFn: ({ id, data }: { id: number; data: object }) => api.updateOrder(id, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['orders'] }); setViewModal(false); setEditModal(false); },
+    onError: (e: any) => alert('Save failed: ' + (e?.message || 'Unknown error')),
   });
 
   const updateStatus = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: string }) => api.updateOrder(id, { status }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
+    mutationFn: ({ id, status }: { id: number; status: string; order?: Order }) => api.patchOrder(id, { status }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['orders'] });
+      if (vars.order) triggerWAIfEnabled(vars.order, vars.status, settings as Record<string, string>);
+    },
   });
 
   const del = useMutation({
@@ -327,6 +384,9 @@ export default function OrderManagement() {
   const today_d = new Date();
   const [calMonth, setCalMonth] = useState(today_d.getMonth());
   const [calYear, setCalYear] = useState(today_d.getFullYear());
+  const [showCalModal, setShowCalModal] = useState(false);
+  const [calModalMonth, setCalModalMonth] = useState(today_d.getMonth());
+  const [calModalYear, setCalModalYear] = useState(today_d.getFullYear());
   const getDaysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
   const getFirstDay = (y: number, m: number) => new Date(y, m, 1).getDay();
   const ordersByDate: Record<string, Order[]> = {};
@@ -373,7 +433,7 @@ export default function OrderManagement() {
             search={search} setSearch={setSearch}
             statusFilter={statusFilter} setStatusFilter={setStatusFilter}
             onView={viewOrder}
-            onStatusChange={(id, s) => updateStatus.mutate({ id, status: s })}
+            onStatusChange={(id, s) => { const o = orders.find(x => x.id === id); updateStatus.mutate({ id, status: s, order: o }); }}
             onDelete={(id) => { if (confirm('Delete this order?')) del.mutate(id); }}
           />
         )}
@@ -392,15 +452,21 @@ export default function OrderManagement() {
             updateBottomSizeSleeveQty={(sz, key, val) => updateBottomSizeSleeveQty(sz, key, val, form, setForm)}
             updateBottomSizeOtherDesc={(sz, desc) => updateBottomSizeOtherDesc(sz, desc, form, setForm)}
             mode="create"
+            onOpenCalendar={(date) => {
+              const d = date ? new Date(date) : new Date();
+              setCalModalMonth(d.getMonth());
+              setCalModalYear(d.getFullYear());
+              setShowCalModal(true);
+            }}
           />
         )}
         {section === 'sheets' && (
           <SheetsSection
-            orders={orders} isLoading={isLoading}
+            orders={orders.filter(o => !['Delivered', 'Cancelled'].includes(o.status))} isLoading={isLoading}
             search={search} setSearch={setSearch}
             statusFilter={statusFilter} setStatusFilter={setStatusFilter}
             onView={viewOrder}
-            onStatusChange={(id, s) => updateStatus.mutate({ id, status: s })}
+            onStatusChange={(id, s) => { const o = orders.find(x => x.id === id); updateStatus.mutate({ id, status: s, order: o }); }}
           />
         )}
         {section === 'calendar' && (
@@ -420,7 +486,7 @@ export default function OrderManagement() {
           onClose={() => setViewModal(false)}
           onEdit={() => openEdit(selected)}
           onStatusChange={(s) => {
-            updateStatus.mutate({ id: selected.id, status: s });
+            updateStatus.mutate({ id: selected.id, status: s, order: selected });
             setSelected(p => p ? { ...p, status: s } : p);
           }}
           onDelete={() => { if (confirm('Delete this order?')) del.mutate(selected.id); }}
@@ -452,6 +518,33 @@ export default function OrderManagement() {
                 updateBottomSizeSleeveQty={(sz, key, val) => updateBottomSizeSleeveQty(sz, key, val, editForm, setEditForm)}
                 updateBottomSizeOtherDesc={(sz, desc) => updateBottomSizeOtherDesc(sz, desc, editForm, setEditForm)}
                 mode="edit"
+                onOpenCalendar={(date) => {
+                  const d = date ? new Date(date) : new Date();
+                  setCalModalMonth(d.getMonth());
+                  setCalModalYear(d.getFullYear());
+                  setShowCalModal(true);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Calendar Modal (from delivery date button) ── */}
+      {showCalModal && (
+        <div className="modal-overlay" onClick={() => setShowCalModal(false)}>
+          <div className="modal modal-lg" onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="modal-header">
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}><CalIcon size={16} /> Delivery Calendar</h3>
+              <button className="btn-icon" onClick={() => setShowCalModal(false)}><X size={16} /></button>
+            </div>
+            <div className="modal-body" style={{ padding: '16px 20px' }}>
+              <CalendarSection
+                ordersByDate={ordersByDate}
+                calMonth={calModalMonth} calYear={calModalYear}
+                setCalMonth={setCalModalMonth} setCalYear={setCalModalYear}
+                getDaysInMonth={getDaysInMonth} getFirstDay={getFirstDay}
+                onView={(id) => { setShowCalModal(false); viewOrder(id); }}
               />
             </div>
           </div>
@@ -557,7 +650,7 @@ type InvoiceResult = { id: number; invoice_no: string; customer_name: string; cu
 type CustomerDetail = { id: number; name: string; phone?: string; mobile?: string; email?: string; company_name?: string };
 
 // ─── Shared Order Form ────────────────────────────────────────────────────────
-function OrderForm({ form, setForm, customers, onSave, onCancel, isSaving, toggleSize, updateSizeQty: _updateSizeQty, updateSizeSleeveQty, updateSizeOtherDesc, toggleBottomSize, updateBottomSizeSleeveQty, updateBottomSizeOtherDesc, mode }: {
+function OrderForm({ form, setForm, customers, onSave, onCancel, isSaving, toggleSize, updateSizeQty: _updateSizeQty, updateSizeSleeveQty, updateSizeOtherDesc, toggleBottomSize, updateBottomSizeSleeveQty, updateBottomSizeOtherDesc, mode, onOpenCalendar }: {
   form: FormShape; setForm: (v: FormShape | ((prev: FormShape) => FormShape)) => void;
   customers: { id: number; name: string }[];
   onSave: (saleId?: number) => void; onCancel: () => void; isSaving: boolean;
@@ -569,6 +662,7 @@ function OrderForm({ form, setForm, customers, onSave, onCancel, isSaving, toggl
   updateBottomSizeSleeveQty: (sz: string, key: 'half' | 'full' | 'other', val: number) => void;
   updateBottomSizeOtherDesc: (sz: string, desc: string) => void;
   mode: 'create' | 'edit';
+  onOpenCalendar?: (date?: string) => void;
 }) {
   const set = (k: keyof FormShape, v: any) => setForm({ ...form, [k]: v });
 
@@ -957,7 +1051,14 @@ function OrderForm({ form, setForm, customers, onSave, onCancel, isSaving, toggl
             </div>
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label>Delivery Date *</label>
-              <input className="form-control" type="date" value={form.delivery_date} onChange={e => set('delivery_date', e.target.value)} />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input className="form-control" type="date" value={form.delivery_date} onChange={e => set('delivery_date', e.target.value)} style={{ flex: 1 }} />
+                <button type="button" className="btn btn-secondary btn-sm" title="View delivery calendar"
+                  onClick={() => onOpenCalendar?.(form.delivery_date)}
+                  style={{ padding: '0 10px', whiteSpace: 'nowrap' }}>
+                  <CalIcon size={14} />
+                </button>
+              </div>
             </div>
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label>Product / Style</label>
@@ -1769,14 +1870,18 @@ function DashboardSection({ stats, trend, orders, onViewOrder }: {
     { label: 'Cancelled', value: stats.cancelled || 0, icon: XCircle, color: '#ef4444', bg: '#fef2f2' },
   ];
 
-  const trendData = trend.map(t => ({
-    month: t.m ? new Date(t.m + '-01').toLocaleDateString('en-LK', { month: 'short', year: '2-digit' }) : t.m,
-    Orders: t.total, Completed: t.completed, Cancelled: t.cancelled,
-  }));
+  const now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const trendMap = Object.fromEntries(trend.map(t => [String(parseInt(t.day)), t]));
+  const trendData = Array.from({ length: daysInMonth }, (_, i) => {
+    const d = String(i + 1);
+    const t = trendMap[d];
+    return { day: d, Orders: t?.total || 0, Completed: t?.completed || 0, Cancelled: t?.cancelled || 0 };
+  });
 
-  const overdue = orders.filter(o => o.delivery_date && o.delivery_date < today() && !['Delivered', 'Collected', 'Cancelled'].includes(o.status));
+  const overdue = orders.filter(o => o.delivery_date && o.delivery_date < today() && !['Delivered', 'Cancelled'].includes(o.status));
   const upcoming = orders.filter(o => {
-    if (!o.delivery_date || ['Delivered', 'Collected', 'Cancelled'].includes(o.status)) return false;
+    if (!o.delivery_date || ['Delivered', 'Cancelled'].includes(o.status)) return false;
     const diff = (new Date(o.delivery_date).getTime() - Date.now()) / 86400000;
     return diff >= 0 && diff <= 7;
   });
@@ -1806,24 +1911,30 @@ function DashboardSection({ stats, trend, orders, onViewOrder }: {
         <div className="card" style={{ padding: '16px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
             <TrendingUp size={15} color="var(--red)" />
-            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Monthly Order Trend</span>
+            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+              Orders This Month — {now.toLocaleDateString('en-LK', { month: 'long', year: 'numeric' })}
+            </span>
           </div>
-          {trendData.length === 0 ? (
-            <div style={{ textAlign: 'center', color: 'var(--text3)', padding: '40px 0', fontSize: '0.8rem' }}>No trend data yet</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={trendData} margin={{ top: 4, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                <Tooltip contentStyle={{ fontSize: '0.78rem', borderRadius: 8 }} />
-                <Legend wrapperStyle={{ fontSize: '0.75rem' }} />
-                <Line type="monotone" dataKey="Orders" stroke="#6366f1" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="Completed" stroke="#10b981" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="Cancelled" stroke="#ef4444" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={trendData} margin={{ top: 4, right: 10, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis
+                dataKey="day"
+                tick={{ fontSize: 9 }}
+                interval={1}
+                tickFormatter={(v) => Number(v) % 2 === 1 ? v : ''}
+              />
+              <YAxis tick={{ fontSize: 10 }} allowDecimals={false} width={28} />
+              <Tooltip
+                contentStyle={{ fontSize: '0.78rem', borderRadius: 8 }}
+                labelFormatter={(v) => `Day ${v}`}
+              />
+              <Legend wrapperStyle={{ fontSize: '0.75rem' }} />
+              <Line type="monotone" dataKey="Orders" stroke="#6366f1" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+              <Line type="monotone" dataKey="Completed" stroke="#10b981" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+              <Line type="monotone" dataKey="Cancelled" stroke="#ef4444" strokeWidth={1.5} dot={false} strokeDasharray="4 2" activeDot={{ r: 4 }} />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
         <div className="card" style={{ padding: '16px 20px' }}>
           <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: 14 }}>Order Summary</div>
@@ -1870,6 +1981,40 @@ function DashboardSection({ stats, trend, orders, onViewOrder }: {
 }
 
 // ─── List Section ─────────────────────────────────────────────────────────────
+type DateRange = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
+const DATE_RANGE_LABELS: { id: DateRange; label: string }[] = [
+  { id: 'all',    label: 'All Time' },
+  { id: 'today',  label: 'Today' },
+  { id: 'week',   label: 'This Week' },
+  { id: 'month',  label: 'This Month' },
+  { id: 'year',   label: 'This Year' },
+  { id: 'custom', label: 'Custom' },
+];
+
+function getDateBounds(range: DateRange, customFrom: string, customTo: string): { from: string; to: string } | null {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  if (range === 'all') return null;
+  if (range === 'today') { const t = fmt(now); return { from: t, to: t }; }
+  if (range === 'week') {
+    const day = now.getDay(); // 0=Sun
+    const mon = new Date(now); mon.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    return { from: fmt(mon), to: fmt(sun) };
+  }
+  if (range === 'month') {
+    const from = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+    const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return { from, to: fmt(last) };
+  }
+  if (range === 'year') {
+    return { from: `${now.getFullYear()}-01-01`, to: `${now.getFullYear()}-12-31` };
+  }
+  if (range === 'custom' && customFrom && customTo) return { from: customFrom, to: customTo };
+  return null;
+}
+
 function ListSection({ orders, isLoading, search, setSearch, statusFilter, setStatusFilter, onView, onStatusChange, onDelete }: {
   orders: Order[]; isLoading: boolean;
   search: string; setSearch: (v: string) => void;
@@ -1878,17 +2023,73 @@ function ListSection({ orders, isLoading, search, setSearch, statusFilter, setSt
   onStatusChange: (id: number, s: string) => void;
   onDelete: (id: number) => void;
 }) {
+  const [dateRange, setDateRange] = useState<DateRange>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+
+  const bounds = getDateBounds(dateRange, customFrom, customTo);
+
+  const filtered = orders.filter(o => {
+    if (!bounds) return true;
+    const d = o.order_date || '';
+    return d >= bounds.from && d <= bounds.to;
+  });
+
   return (
     <>
+      {/* ── Date Range Bar ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+        {DATE_RANGE_LABELS.map(r => (
+          <button
+            key={r.id}
+            type="button"
+            onClick={() => setDateRange(r.id)}
+            style={{
+              padding: '5px 14px', borderRadius: 20, fontSize: '0.78rem', fontWeight: 600,
+              border: `1.5px solid ${dateRange === r.id ? 'var(--accent, #6366f1)' : 'var(--border)'}`,
+              background: dateRange === r.id ? 'var(--accent, #6366f1)' : '#fff',
+              color: dateRange === r.id ? '#fff' : 'var(--text2)',
+              cursor: 'pointer', transition: 'all 0.15s',
+            }}
+          >{r.label}</button>
+        ))}
+        {dateRange === 'custom' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 4 }}>
+            <input type="date" className="form-control" style={{ width: 140, padding: '4px 10px', fontSize: '0.8rem' }}
+              value={customFrom} onChange={e => setCustomFrom(e.target.value)} />
+            <span style={{ fontSize: '0.78rem', color: 'var(--text3)' }}>→</span>
+            <input type="date" className="form-control" style={{ width: 140, padding: '4px 10px', fontSize: '0.8rem' }}
+              value={customTo} onChange={e => setCustomTo(e.target.value)} />
+          </div>
+        )}
+        {bounds && (
+          <span style={{ fontSize: '0.74rem', color: 'var(--text3)', marginLeft: 4 }}>
+            {filtered.length} order{filtered.length !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+
       <div className="filter-bar">
         <div style={{ position: 'relative' }}>
           <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
           <input className="form-control" style={{ paddingLeft: 32, width: 260 }} placeholder="Search orders…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        <select className="form-control" style={{ width: 160 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-          <option value="">All Status</option>
-          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {['', ...STATUSES].map(s => (
+            <button
+              key={s || 'all'}
+              type="button"
+              onClick={() => setStatusFilter(s)}
+              style={{
+                padding: '5px 12px', borderRadius: 20, fontSize: '0.76rem', fontWeight: 600,
+                border: `1.5px solid ${statusFilter === s ? (s ? STATUS_COLOR[s] : 'var(--text)') : 'var(--border)'}`,
+                background: statusFilter === s ? (s ? STATUS_BG[s] : '#f1f5f9') : '#fff',
+                color: statusFilter === s ? (s ? STATUS_COLOR[s] : 'var(--text)') : 'var(--text3)',
+                cursor: 'pointer', transition: 'all 0.15s',
+              }}
+            >{s || 'All'}</button>
+          ))}
+        </div>
       </div>
       <div className="card">
         {isLoading ? <div className="loading">Loading…</div> : (
@@ -1898,24 +2099,33 @@ function ListSection({ orders, isLoading, search, setSearch, statusFilter, setSt
                 <tr><th>Order #</th><th>Customer</th><th>Product</th><th>Order Date</th><th>Delivery</th><th>Qty</th><th>Status</th><th>Amount</th><th></th></tr>
               </thead>
               <tbody>
-                {orders.length === 0 && <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--text3)', padding: 32 }}>No orders found</td></tr>}
-                {orders.map(o => (
+                {filtered.length === 0 && <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--text3)', padding: 32 }}>No orders found</td></tr>}
+                {filtered.map(o => (
                   <tr key={o.id}>
                     <td style={{ fontWeight: 700, color: 'var(--red)' }}>{o.order_no}</td>
                     <td>{o.customer_name}</td>
                     <td style={{ fontSize: '0.82rem' }}>{o.product || '—'}</td>
                     <td style={{ fontSize: '0.78rem' }}>{fmtDate(o.order_date)}</td>
                     <td style={{ fontSize: '0.78rem' }}>
-                      <span style={{ color: o.delivery_date && o.delivery_date < today() && !['Delivered', 'Collected', 'Cancelled'].includes(o.status) ? '#ef4444' : 'inherit' }}>
+                      <span style={{ color: o.delivery_date && o.delivery_date < today() && !['Delivered', 'Cancelled'].includes(o.status) ? '#ef4444' : 'inherit' }}>
                         {fmtDate(o.delivery_date)}
                       </span>
                     </td>
                     <td style={{ textAlign: 'center' }}>{o.total_qty || 0}</td>
                     <td>
-                      <select value={o.status} onChange={e => onStatusChange(o.id, e.target.value)}
-                        style={{ border: 'none', background: 'transparent', fontSize: '0.78rem', cursor: 'pointer', fontFamily: 'inherit', color: STATUS_COLOR[o.status] || 'inherit', fontWeight: 600 }}>
-                        {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
+                      <div style={{ position: 'relative', display: 'inline-block' }}>
+                        <select value={o.status} onChange={e => onStatusChange(o.id, e.target.value)}
+                          style={{
+                            appearance: 'none', border: 'none', borderRadius: 20,
+                            background: STATUS_BG[o.status] || '#f1f5f9',
+                            color: STATUS_COLOR[o.status] || 'inherit',
+                            fontSize: '0.76rem', fontWeight: 700, cursor: 'pointer',
+                            fontFamily: 'inherit', padding: '4px 24px 4px 10px',
+                          }}>
+                          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        <ChevronDown size={11} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', color: STATUS_COLOR[o.status] || '#888', pointerEvents: 'none' }} />
+                      </div>
                     </td>
                     <td style={{ fontWeight: 600 }}>{fmt(o.total_amount)}</td>
                     <td>
@@ -1961,7 +2171,7 @@ function SheetsSection({ orders, isLoading, search, setSearch, statusFilter, set
             <div style={{ gridColumn: '1/-1', textAlign: 'center', color: 'var(--text3)', padding: 40 }}>No order sheets found</div>
           )}
           {orders.map(o => {
-            const isOverdue = o.delivery_date && o.delivery_date < today() && !['Delivered', 'Collected', 'Cancelled'].includes(o.status);
+            const isOverdue = o.delivery_date && o.delivery_date < today() && !['Delivered', 'Cancelled'].includes(o.status);
             return (
               <div key={o.id} className="card" style={{ padding: '16px 18px', borderLeft: `4px solid ${STATUS_COLOR[o.status] || 'var(--border)'}`, cursor: 'pointer' }}
                 onClick={() => onView(o.id)}>
@@ -2021,39 +2231,177 @@ function CalendarSection({ ordersByDate, calMonth, calYear, setCalMonth, setCalY
   const nextMonth = () => { if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1); } else setCalMonth(calMonth + 1); };
   const todayStr = today();
 
+  // Capacity setting — persisted in localStorage
+  const [maxCapacity, setMaxCapacity] = React.useState<number>(() => {
+    const v = localStorage.getItem('pandora_cal_capacity');
+    return v ? parseInt(v) : 0;
+  });
+  const [showCapSetting, setShowCapSetting] = React.useState(false);
+  const [capInput, setCapInput] = React.useState(maxCapacity > 0 ? String(maxCapacity) : '');
+
+  const saveCapacity = () => {
+    const v = parseInt(capInput);
+    if (!isNaN(v) && v > 0) { setMaxCapacity(v); localStorage.setItem('pandora_cal_capacity', String(v)); }
+    else { setMaxCapacity(0); localStorage.removeItem('pandora_cal_capacity'); }
+    setShowCapSetting(false);
+  };
+
+  // Selected date for the list below
+  const [selectedDate, setSelectedDate] = React.useState<string | null>(null);
+
+  // Build list of all dates in this month that have orders — for the list below
+  const daysInMonth = getDaysInMonth(calYear, calMonth);
+  const monthDates = Array.from({ length: daysInMonth }, (_, i) => {
+    const d = i + 1;
+    return `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }).filter(ds => (ordersByDate[ds] || []).length > 0);
+
   return (
-    <div className="card">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <button className="btn btn-secondary btn-sm" onClick={prevMonth}><ChevronLeft size={14} /></button>
-        <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>
-          {new Date(calYear, calMonth).toLocaleDateString('en-LK', { month: 'long', year: 'numeric' })}
-        </h3>
-        <button className="btn btn-secondary btn-sm" onClick={nextMonth}><ChevronRight size={14} /></button>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-          <div key={d} style={{ textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, color: 'var(--text3)', padding: '4px 0' }}>{d}</div>
-        ))}
-        {Array.from({ length: getFirstDay(calYear, calMonth) }).map((_, i) => <div key={`e${i}`} />)}
-        {Array.from({ length: getDaysInMonth(calYear, calMonth) }).map((_, i) => {
-          const d = i + 1;
-          const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-          const dayOrders = ordersByDate[dateStr] || [];
-          const isToday = dateStr === todayStr;
-          return (
-            <div key={d} style={{ minHeight: 72, border: `1px solid ${isToday ? 'var(--red)' : 'var(--border)'}`, borderRadius: 6, padding: 4, background: isToday ? '#FFF0F2' : 'var(--surface)' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: isToday ? 700 : 400, color: isToday ? 'var(--red)' : 'var(--text)', marginBottom: 3 }}>{d}</div>
-              {dayOrders.slice(0, 2).map(o => (
-                <div key={o.id} onClick={() => onView(o.id)}
-                  style={{ fontSize: '0.62rem', padding: '2px 5px', borderRadius: 3, marginBottom: 2, cursor: 'pointer', background: STATUS_COLOR[o.status] || 'var(--red)', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {o.order_no}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="card">
+        {/* Header row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <button className="btn btn-secondary btn-sm" onClick={prevMonth}><ChevronLeft size={14} /></button>
+          <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>
+            {new Date(calYear, calMonth).toLocaleDateString('en-LK', { month: 'long', year: 'numeric' })}
+          </h3>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {/* Capacity indicator */}
+            {maxCapacity > 0 && (
+              <span style={{ fontSize: '0.72rem', color: 'var(--text2)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 20, padding: '2px 10px', fontWeight: 600 }}>
+                Max: {maxCapacity} pcs/day
+              </span>
+            )}
+            <button className="btn btn-secondary btn-sm" title="Capacity settings" onClick={() => { setCapInput(maxCapacity > 0 ? String(maxCapacity) : ''); setShowCapSetting(s => !s); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Settings size={13} /> Capacity
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={nextMonth}><ChevronRight size={14} /></button>
+          </div>
+        </div>
+
+        {/* Capacity setting panel */}
+        {showCapSetting && (
+          <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 16px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>Max production capacity per day (pcs):</span>
+            <input type="number" min={1} value={capInput} onChange={e => setCapInput(e.target.value)}
+              style={{ width: 90, padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: '0.85rem', fontFamily: 'inherit' }}
+              placeholder="e.g. 500" />
+            <button className="btn btn-primary btn-sm" onClick={saveCapacity}>Save</button>
+            {maxCapacity > 0 && <button className="btn btn-secondary btn-sm" onClick={() => { setMaxCapacity(0); localStorage.removeItem('pandora_cal_capacity'); setShowCapSetting(false); }}>Clear</button>}
+          </div>
+        )}
+
+        {/* Calendar grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+            <div key={d} style={{ textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, color: 'var(--text3)', padding: '4px 0' }}>{d}</div>
+          ))}
+          {Array.from({ length: getFirstDay(calYear, calMonth) }).map((_, i) => <div key={`e${i}`} />)}
+          {Array.from({ length: daysInMonth }).map((_, i) => {
+            const d = i + 1;
+            const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const dayOrders = ordersByDate[dateStr] || [];
+            const dayQty = dayOrders.reduce((s, o) => s + (o.total_qty || 0), 0);
+            const isToday = dateStr === todayStr;
+            const isSelected = dateStr === selectedDate;
+            const isOverCapacity = maxCapacity > 0 && dayQty >= maxCapacity;
+            const hasOrders = dayOrders.length > 0;
+
+            let bg = 'var(--surface)';
+            let borderColor = 'var(--border)';
+            let dayNumColor = 'var(--text)';
+
+            if (isOverCapacity) { bg = '#FFF0F0'; borderColor = '#ef4444'; dayNumColor = '#ef4444'; }
+            else if (isToday) { bg = '#FFF0F2'; borderColor = 'var(--red)'; dayNumColor = 'var(--red)'; }
+            if (isSelected) { borderColor = '#6366f1'; bg = '#f5f3ff'; }
+
+            return (
+              <div key={d}
+                onClick={() => hasOrders ? setSelectedDate(isSelected ? null : dateStr) : null}
+                style={{ minHeight: 72, border: `1.5px solid ${borderColor}`, borderRadius: 6, padding: 4, background: bg, cursor: hasOrders ? 'pointer' : 'default', transition: 'all 0.1s' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: isToday || isOverCapacity ? 700 : 400, color: dayNumColor }}>{d}</span>
+                  {isOverCapacity && <span title={`${dayQty} pcs — over capacity`} style={{ fontSize: '0.6rem', background: '#ef4444', color: '#fff', borderRadius: 10, padding: '0 5px', fontWeight: 700 }}>FULL</span>}
+                  {!isOverCapacity && maxCapacity > 0 && hasOrders && <span style={{ fontSize: '0.58rem', color: 'var(--text3)' }}>{dayQty}p</span>}
                 </div>
-              ))}
-              {dayOrders.length > 2 && <div style={{ fontSize: '0.58rem', color: 'var(--text3)' }}>+{dayOrders.length - 2} more</div>}
-            </div>
-          );
-        })}
+                {dayOrders.slice(0, 2).map(o => (
+                  <div key={o.id} onClick={e => { e.stopPropagation(); onView(o.id); }}
+                    style={{ fontSize: '0.62rem', padding: '2px 5px', borderRadius: 3, marginBottom: 2, cursor: 'pointer', background: STATUS_COLOR[o.status] || 'var(--red)', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {o.order_no}
+                  </div>
+                ))}
+                {dayOrders.length > 2 && <div style={{ fontSize: '0.58rem', color: 'var(--text3)' }}>+{dayOrders.length - 2} more</div>}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Legend */}
+        {maxCapacity > 0 && (
+          <div style={{ display: 'flex', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.72rem', color: 'var(--text2)' }}>
+              <span style={{ width: 12, height: 12, borderRadius: 3, background: '#FFF0F0', border: '1.5px solid #ef4444', display: 'inline-block' }} /> Over capacity
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.72rem', color: 'var(--text2)' }}>
+              <span style={{ width: 12, height: 12, borderRadius: 3, background: '#FFF0F2', border: '1.5px solid var(--red)', display: 'inline-block' }} /> Today
+            </span>
+          </div>
+        )}
       </div>
+
+      {/* ── Date-wise order list ── */}
+      {monthDates.length > 0 && (
+        <div className="card">
+          <div style={{ fontWeight: 700, fontSize: '0.88rem', marginBottom: 12, color: 'var(--text)' }}>
+            Orders This Month
+            <span style={{ fontWeight: 400, fontSize: '0.78rem', color: 'var(--text3)', marginLeft: 8 }}>
+              {new Date(calYear, calMonth).toLocaleDateString('en-LK', { month: 'long', year: 'numeric' })}
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {monthDates.map(ds => {
+              const orders = ordersByDate[ds];
+              const dayQty = orders.reduce((s, o) => s + (o.total_qty || 0), 0);
+              const isOverCap = maxCapacity > 0 && dayQty >= maxCapacity;
+              const label = new Date(ds + 'T00:00:00').toLocaleDateString('en-LK', { weekday: 'short', day: 'numeric', month: 'short' });
+              return (
+                <div key={ds}>
+                  {/* Date header */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: isOverCap ? '#ef4444' : 'var(--text2)', minWidth: 110 }}>{label}</div>
+                    <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                    <div style={{ fontSize: '0.72rem', color: isOverCap ? '#ef4444' : 'var(--text3)', fontWeight: 600 }}>
+                      {dayQty} pcs{isOverCap ? ' — FULL' : ''}
+                    </div>
+                  </div>
+                  {/* Orders */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {orders.map(o => (
+                      <div key={o.id} onClick={() => onView(o.id)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer', transition: 'background 0.1s' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface)')}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text)', minWidth: 80 }}>{o.order_no}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.customer_name}</span>
+                        {o.product && <span style={{ fontSize: '0.7rem', color: 'var(--text3)' }}>{o.product}</span>}
+                        <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text2)' }}>{o.total_qty || 0} pcs</span>
+                        <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: 20, background: `${STATUS_COLOR[o.status] || 'var(--red)'}20`, color: STATUS_COLOR[o.status] || 'var(--red)', fontWeight: 700, whiteSpace: 'nowrap' }}>{o.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {monthDates.length === 0 && (
+        <div className="card" style={{ textAlign: 'center', color: 'var(--text3)', padding: '24px', fontSize: '0.85rem' }}>
+          No delivery orders this month
+        </div>
+      )}
     </div>
   );
 }
@@ -2067,7 +2415,7 @@ function PrintableOrderSheet({ order, nd }: { order: Order; nd: NotesData }) {
 
   const elements = ((nd as any).elements || []) as { id: number; name: string; dataUrl: string }[];
   const designImage = (nd as any).design_image as string | undefined;
-  const withBottom = (nd as any).with_bottom as string | undefined;
+
   const tshirtNames = ((nd as any).tshirt_names || []) as NameDetail[];
   const bottomNames = ((nd as any).bottom_names || []) as NameDetail[];
   const bottomSizes = ((nd as any).bottom_sizes || []) as Size[];
@@ -2087,9 +2435,8 @@ function PrintableOrderSheet({ order, nd }: { order: Order; nd: NotesData }) {
           {order.product && <div className="ps-product-name">{order.product}</div>}
         </div>
         <div className="ps-header-meta">
-          <div className="ps-meta-row"><span className="ps-meta-lbl">INVOICE NO.</span><span className="ps-meta-val">{order.order_no}</span></div>
-          <div className="ps-meta-row"><span className="ps-meta-lbl">DATE</span><span className="ps-meta-val">{fmtDate(order.order_date)}</span></div>
-          <div className="ps-meta-row"><span className="ps-meta-lbl">DELIVERY DATE</span><span className="ps-meta-val">{fmtDate(order.delivery_date)}</span></div>
+          <div className="ps-meta-row"><span className="ps-meta-lbl">ORDER NO.</span><span className="ps-meta-val ps-meta-val-dark">{order.order_no}</span></div>
+          {order.invoice_no && <div className="ps-meta-row"><span className="ps-meta-lbl">INVOICE NO.</span><span className="ps-meta-val ps-meta-val-dark">{order.invoice_no}</span></div>}
         </div>
       </div>
 
@@ -2104,16 +2451,16 @@ function PrintableOrderSheet({ order, nd }: { order: Order; nd: NotesData }) {
           {order.fabric_details && (
             <div className="ps-customer-meta-item">
               <span className="ps-customer-meta-lbl">Fabric</span>
-              <span className="ps-customer-meta-val">{order.fabric_details}</span>
+              <span className="ps-customer-meta-val ps-fabric-big">{order.fabric_details}</span>
             </div>
           )}
           <div className="ps-customer-meta-item">
             <span className="ps-customer-meta-lbl">Order Date</span>
-            <span className="ps-customer-meta-val">{fmtDate(order.order_date)}</span>
+            <span className="ps-customer-meta-val ps-fabric-big">{fmtDate(order.order_date)}</span>
           </div>
           <div className="ps-customer-meta-item">
             <span className="ps-customer-meta-lbl">Delivery Date</span>
-            <span className="ps-customer-meta-val">{fmtDate(order.delivery_date)}</span>
+            <span className="ps-customer-meta-val ps-fabric-big" style={{ color: '#C0001A' }}>{fmtDate(order.delivery_date)}</span>
           </div>
         </div>
       </div>
@@ -2126,10 +2473,12 @@ function PrintableOrderSheet({ order, nd }: { order: Order; nd: NotesData }) {
             <span className="ps-spec-val">{nd.collar_type}{nd.collar_colour ? ` – ${nd.collar_colour}` : ''}</span>
           </div>
         )}
-        <div className="ps-spec-pill">
-          <span className="ps-spec-lbl">OPEN</span>
-          <span className="ps-spec-val">{nd.open ? 'YES' : 'NO'}</span>
-        </div>
+        {nd.open && (
+          <div className="ps-spec-pill">
+            <span className="ps-spec-lbl">OPEN</span>
+            <span className="ps-spec-val">YES</span>
+          </div>
+        )}
         {nd.button_type && (
           <div className="ps-spec-pill">
             <span className="ps-spec-lbl">BUTTON</span>
@@ -2158,11 +2507,6 @@ function PrintableOrderSheet({ order, nd }: { order: Order; nd: NotesData }) {
           <div className="ps-spec-pill">
             <span className="ps-spec-lbl">EMBROIDERY</span>
             <span className="ps-spec-val">{order.embroidery_details}</span>
-          </div>
-        )}
-        {withBottom && (
-          <div className="ps-spec-pill ps-spec-pill-highlight">
-            <span className="ps-spec-val">{withBottom === 'shorts' ? 'WITH SHORTS' : 'WITH BOTTOM'}</span>
           </div>
         )}
       </div>
@@ -2347,15 +2691,15 @@ function ViewModal({ order, onClose, onEdit, onStatusChange, onDelete }: {
   const nd = parseNotes(order.notes || '');
 
   const handlePrint = () => {
-    // Set a body class then call print, remove after
     document.body.classList.add('printing-order');
+    window.onafterprint = () => { document.body.classList.remove('printing-order'); window.onafterprint = null; };
     window.print();
-    document.body.classList.remove('printing-order');
   };
 
   const statusColor = STATUS_COLOR[order.status] || '#6366f1';
 
   return (
+    <>
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal-lg om-modal" onClick={e => e.stopPropagation()}>
         {/* Modern hero header */}
@@ -2518,10 +2862,6 @@ function ViewModal({ order, onClose, onEdit, onStatusChange, onDelete }: {
             </div>
           </div>
 
-          {/* Print view — hidden on screen, visible when printing */}
-          <div className="print-only" ref={printRef}>
-            <PrintableOrderSheet order={order} nd={nd} />
-          </div>
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" style={{ color: '#ef4444', borderColor: '#fecaca' }} onClick={onDelete}><Trash2 size={13} /> Delete</button>
@@ -2529,6 +2869,14 @@ function ViewModal({ order, onClose, onEdit, onStatusChange, onDelete }: {
         </div>
       </div>
     </div>
+    {/* Print view — portalled to body so it's a direct body child */}
+    {createPortal(
+      <div className="print-only" ref={printRef}>
+        <PrintableOrderSheet order={order} nd={nd} />
+      </div>,
+      document.body
+    )}
+    </>
   );
 }
 
