@@ -6,8 +6,8 @@ import {
   CartesianGrid
 } from 'recharts';
 import {
-  TrendingUp, ShoppingCart, Package, Users, AlertTriangle,
-  CalendarClock, Star, Wallet, Trophy, Medal
+  AlertTriangle,
+  CalendarClock, Trophy, Medal
 } from 'lucide-react';
 
 const fmt = (n: number) => new Intl.NumberFormat('en-LK', { style: 'currency', currency: 'LKR', maximumFractionDigits: 0 }).format(n || 0);
@@ -78,7 +78,7 @@ export default function Dashboard() {
         <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: 10 }}>
           {/* 1 — Revenue This Month */}
           <KpiCard
-            icon={<TrendingUp size={20} />}
+            gif="/icon-revenue.gif"
             color="#C0001A"
             label="Revenue — This Month"
             value={fmt(d.monthlySales || 0)}
@@ -86,7 +86,7 @@ export default function Dashboard() {
           />
           {/* 2 — Total Orders This Month */}
           <KpiCard
-            icon={<ShoppingCart size={20} />}
+            gif="/icon-order.gif"
             color="#1565C0"
             label="Orders — This Month"
             value={fmtNum(d.monthTotalOrders || 0)}
@@ -94,7 +94,7 @@ export default function Dashboard() {
           />
           {/* 3 — Undelivered Orders & Pcs */}
           <KpiCard
-            icon={<Package size={20} />}
+            gif="/icon-undelivered.gif"
             color="#E65100"
             label="Undelivered Orders"
             value={`${fmtNum(d.undeliveredOrders || 0)} orders`}
@@ -104,7 +104,7 @@ export default function Dashboard() {
         <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: 20 }}>
           {/* 4 — Outstanding Amount */}
           <KpiCard
-            icon={<Wallet size={20} />}
+            gif="/icon-outstanding.gif"
             color="#B71C1C"
             label="Outstanding Amount"
             value={fmt(d.outstandingAmount || 0)}
@@ -113,7 +113,7 @@ export default function Dashboard() {
           />
           {/* 5 — New Customers */}
           <KpiCard
-            icon={<Users size={20} />}
+            gif="/icon-new-customer.gif"
             color="#2E7D32"
             label="New Customers — This Month"
             value={fmtNum(d.newCustomers || 0)}
@@ -121,7 +121,7 @@ export default function Dashboard() {
           />
           {/* 6 — HR Avg KPI Score */}
           <KpiCard
-            icon={<Star size={20} />}
+            gif="/icon-kpi.gif"
             color="#6A1FA0"
             label="HR Avg KPI Score — This Month"
             value={`${d.monthAvgKpi ?? 0}%`}
@@ -351,12 +351,16 @@ function LeaderboardRow({ rank, emp }: { rank: number; emp: { employeeName: stri
   );
 }
 
-function KpiCard({ icon, color, label, value, sub, highlight }: {
-  icon: React.ReactNode; color: string; label: string; value: string; sub: string; highlight?: boolean;
+function KpiCard({ icon, gif, color, label, value, sub, highlight }: {
+  icon?: React.ReactNode; gif?: string; color: string; label: string; value: string; sub: string; highlight?: boolean;
 }) {
   return (
     <div className="kpi-card" style={highlight ? { borderLeft: `3px solid ${color}`, background: `${color}06` } : {}}>
-      <div className="kpi-icon" style={{ background: `${color}15`, color }}>{icon}</div>
+      <div className="kpi-icon" style={{ background: `${color}15`, color, overflow: 'hidden', padding: gif ? 0 : undefined }}>
+        {gif
+          ? <img src={gif} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          : icon}
+      </div>
       <div className="kpi-info">
         <label>{label}</label>
         <h3 style={{ fontSize: '1.3rem', color: highlight ? color : undefined }}>{value}</h3>
