@@ -219,7 +219,7 @@ function printReceipt(sale: any, items: any[], settings?: Record<string, string>
 /* ─── A4 QUOTATION PRINT HELPER ──────────────────────────────────── */
 async function printQuotation(quotationId: number, settings?: Record<string, string>) {
   // Fetch full quotation with items
-  const res = await fetch(`/quotations/${quotationId}`);
+  const res = await fetch(`https://pixal.pandoralk.workers.dev/quotations/${quotationId}`);
   const { quotation: q, items } = await res.json() as any;
   const fmt = (n: number) => 'Rs. ' + Number(n).toLocaleString('en-LK', { minimumFractionDigits: 2 });
 
@@ -323,9 +323,11 @@ async function printQuotation(quotationId: number, settings?: Record<string, str
 
   const win = window.open('', '_blank', 'width=900,height=700');
   if (!win) { alert('Allow popups to print'); return; }
+  win.document.open();
   win.document.write(html);
   win.document.close();
-  win.onload = () => { win.focus(); win.print(); };
+  // Give browser time to render before printing
+  setTimeout(() => { win.focus(); win.print(); }, 600);
 }
 
 function POSTab() {
