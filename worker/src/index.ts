@@ -712,7 +712,8 @@ export default {
             COUNT(CASE WHEN status='Ready' THEN 1 END) uncollected,
             COUNT(CASE WHEN status='Cancelled' THEN 1 END) cancelled,
             COUNT(CASE WHEN delivery_date < date('now') AND status NOT IN ('Delivered','Collected','Cancelled') THEN 1 END) overdue,
-            COALESCE(SUM(CASE WHEN status NOT IN ('Cancelled') THEN total_amount ELSE 0 END),0) total_value
+            COALESCE(SUM(CASE WHEN status NOT IN ('Cancelled') THEN total_amount ELSE 0 END),0) total_value,
+            COALESCE(SUM(CASE WHEN status IN ('Delivered','Collected') THEN total_qty ELSE 0 END),0) delivered_pcs
           FROM orders`).first<any>(),
         env.pandora_db.prepare(`
           SELECT strftime('%d', order_date) day,

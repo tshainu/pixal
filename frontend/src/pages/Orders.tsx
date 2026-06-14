@@ -9,7 +9,7 @@ import {
   LayoutGrid, List, FilePlus, FileCheck,
   AlertTriangle, TrendingUp, Clock, CheckCircle, XCircle,
   ChevronLeft, ChevronRight, ChevronDown, Edit2, Printer, UserPlus, Minus,
-  Shirt, Users, StickyNote, Settings,
+  Shirt, Users, StickyNote, Settings, Package,
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -43,7 +43,7 @@ type Order = {
 type Stats = {
   total: number; new_orders: number; ongoing: number; active: number;
   completed: number; uncollected: number; cancelled: number; overdue: number;
-  total_value: number;
+  total_value: number; delivered_pcs: number;
 };
 type TrendPoint = { day: string; total: number; cancelled: number; completed: number };
 
@@ -1868,6 +1868,7 @@ function DashboardSection({ stats, trend, orders, onViewOrder }: {
     { label: 'Ongoing', value: stats.ongoing || 0, icon: Clock, color: '#f59e0b', bg: '#fffbeb' },
     { label: 'Ready / Uncollected', value: stats.uncollected || 0, icon: CheckCircle, color: '#10b981', bg: '#ecfdf5' },
     { label: 'Cancelled', value: stats.cancelled || 0, icon: XCircle, color: '#ef4444', bg: '#fef2f2' },
+    { label: 'Completed Pcs', value: (stats.delivered_pcs || 0).toLocaleString(), icon: Package, color: '#0ea5e9', bg: '#e0f2fe' },
   ];
 
   const now = new Date();
@@ -1894,7 +1895,7 @@ function DashboardSection({ stats, trend, orders, onViewOrder }: {
           <strong>{overdue.length} overdue order{overdue.length > 1 ? 's' : ''}</strong> — past delivery date and not yet delivered.
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 20 }}>
         {kpis.map(k => (
           <div key={k.label} className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{ width: 42, height: 42, borderRadius: 10, background: k.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1942,6 +1943,7 @@ function DashboardSection({ stats, trend, orders, onViewOrder }: {
             { label: 'Total Orders', value: stats.total || 0, color: 'var(--text)' },
             { label: 'Active', value: stats.active || 0, color: '#6366f1' },
             { label: 'Completed', value: stats.completed || 0, color: '#10b981' },
+            { label: 'Completed Pcs', value: (stats.delivered_pcs || 0).toLocaleString() + ' pcs', color: '#0ea5e9' },
             { label: 'Overdue', value: stats.overdue || 0, color: '#ef4444' },
           ].map(r => (
             <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
