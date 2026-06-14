@@ -13,7 +13,8 @@ const REPORT_TYPES = [
   { key: 'sales-report',    label: 'Sales Report',      icon: '📈', group: 'Sales' },
   { key: 'purchase-report', label: 'Purchase Report',   icon: '🛒', group: 'Purchases' },
   { key: 'stock-report',    label: 'Stock Report',      icon: '📦', group: 'Inventory' },
-  { key: 'order-report',    label: 'Orders Report',     icon: '📋', group: 'Orders' },
+  { key: 'order-report',       label: 'Orders Report',      icon: '📋', group: 'Orders' },
+  { key: 'production-report',  label: 'Production Report',  icon: '🏭', group: 'Orders' },
   { key: 'expense-report',  label: 'Expense Report',    icon: '💸', group: 'Finance' },
   { key: 'profit-report',   label: 'Profit & Loss',     icon: '💰', group: 'Finance' },
   { key: 'top-performers',  label: 'Top Performers',    icon: '🏆', group: 'HR' },
@@ -54,8 +55,9 @@ export default function Reports() {
   const range: DateRange = preset === 'custom' ? customRange : getRange(preset);
 
   const isSales = activeReport === 'sales-report';
+  const isProduction = activeReport === 'production-report';
 
-  const params: Record<string, string> = isSales
+  const params: Record<string, string> = (isSales || isProduction)
     ? { from: range.from, to: range.to }
     : { month };
 
@@ -71,7 +73,7 @@ export default function Reports() {
       <div className="topbar">
         <h2>Reports</h2>
         <div className="topbar-right">
-          {!isSales && (
+          {!isSales && !isProduction && (
             <input className="form-control" type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ width: 180 }} />
           )}
         </div>
@@ -180,7 +182,7 @@ function ReportView({ type, data, month, preset, setPreset, customRange, setCust
     <div>
       <div style={{ marginBottom: 16 }}>
         <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 4 }}>{title}</h3>
-        {type !== 'sales-report' && (
+        {type !== 'sales-report' && type !== 'production-report' && (
           <div style={{ fontSize: '0.78rem', color: 'var(--text3)' }}>Period: {month}</div>
         )}
       </div>
@@ -198,6 +200,12 @@ function ReportView({ type, data, month, preset, setPreset, customRange, setCust
       {type === 'purchase-report' && <GenericTable rows={Array.isArray(d?.data) ? d.data as Record<string,unknown>[] : (Array.isArray(d) ? d as Record<string,unknown>[] : [])} />}
       {type === 'stock-report'    && <StockReport rows={Array.isArray(d?.data) ? d.data as Record<string,unknown>[] : (Array.isArray(d) ? d as Record<string,unknown>[] : [])} />}
       {type === 'order-report'    && <OrderReport rows={Array.isArray(d?.data) ? d.data as Record<string,unknown>[] : (Array.isArray(d) ? d as Record<string,unknown>[] : [])} />}
+      {type === 'production-report' && (
+        <>
+          <RangePicker preset={preset} setPreset={setPreset} customRange={customRange} setCustomRange={setCustomRange} range={range} />
+          <ProductionReport data={d as any} />
+        </>
+      )}
       {type === 'expense-report'  && <ExpenseReport rows={Array.isArray(d?.data) ? d.data as Record<string,unknown>[] : (Array.isArray(d) ? d as Record<string,unknown>[] : [])} summary={(d?.summary as unknown[] | undefined) || []} />}
       {type === 'profit-report'   && <ProfitReport rows={Array.isArray(d?.data) ? d.data as Record<string,unknown>[] : (Array.isArray(d) ? d as Record<string,unknown>[] : [])} />}
     </div>
@@ -565,6 +573,233 @@ function ProfitReport({ rows }: { rows: Record<string,unknown>[] }) {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Production Report ─────────────────────────────────────────────────────────
+function ProductionReport({ data }: { data: any }) {
+  const [tab, setTab] = useState<'summary' | 'sizes' | 'detail'>('summary');
+
+  const byProduct: Record<string,unknown>[] = data?.byProduct || [];
+  const bySizes: Record<string,unknown>[]   = data?.bySizes || [];
+  const detail: Record<string,unknown>[]    = data?.detail || [];
+  const totals = data?.totals || {};
+
+  const totalOrders = Number(totals.total_orders || 0);
+  const totalPcs    = Number(totals.total_pcs || 0);
+  const totalAmt    = Number(totals.total_amount || 0);
+
+  // unique products for size grouping
+  const products = Array.from(new Set(byProduct.map(r => String(r.product))));
+
+  const COLORS_LOCAL = ['#C0001A','#6366f1','#f59e0b','#10b981','#0ea5e9','#ec4899','#8b5cf6','#14b8a6'];
+
+  if (!data) return <div className="empty"><div className="empty-icon">🏭</div><p>No data for this period</p></div>;
+
+  return (
+    <div>
+      {/* KPI row */}
+      <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: 20 }}>
+        <StatCard label="Total Orders Delivered" value={String(totalOrders)} />
+        <StatCard label="Total Pcs Produced" value={totalPcs.toLocaleString()} positive />
+        <StatCard label="Total Order Value" value={fmt(totalAmt)} positive />
+      </div>
+
+      {/* Chart — pcs by product */}
+      {byProduct.length > 0 && (
+        <div className="card" style={{ padding: '16px 20px', marginBottom: 16 }}>
+          <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: 12 }}>Pcs by Product Type</div>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={byProduct} margin={{ top: 4, right: 10, left: -10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="product" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+              <Tooltip contentStyle={{ fontSize: '0.78rem', borderRadius: 8 }} />
+              <Bar dataKey="total_pcs" name="Pcs" radius={[4,4,0,0]}>
+                {byProduct.map((_, i) => (
+                  <Cell key={i} fill={COLORS_LOCAL[i % COLORS_LOCAL.length]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid var(--border)', marginBottom: 16 }}>
+        {[
+          { key: 'summary', label: `By Product (${byProduct.length})` },
+          { key: 'sizes',   label: 'Size Breakdown' },
+          { key: 'detail',  label: `Orders (${detail.length})` },
+        ].map(t => (
+          <button key={t.key} onClick={() => setTab(t.key as any)}
+            style={{
+              padding: '8px 20px', border: 'none', background: 'transparent', cursor: 'pointer',
+              fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: tab === t.key ? 700 : 400,
+              color: tab === t.key ? 'var(--red)' : 'var(--text2)',
+              borderBottom: tab === t.key ? '2px solid var(--red)' : '2px solid transparent',
+              marginBottom: -2,
+            }}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* Summary by product */}
+      {tab === 'summary' && (
+        <div className="card">
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Product Type</th>
+                  <th style={{ textAlign: 'center' }}>Orders</th>
+                  <th style={{ textAlign: 'right' }}>Total Pcs</th>
+                  <th style={{ textAlign: 'right' }}>% of Total</th>
+                  <th style={{ textAlign: 'right' }}>Order Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byProduct.length === 0 && (
+                  <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text3)', padding: 32 }}>No data for this period</td></tr>
+                )}
+                {byProduct.map((r, i) => {
+                  const pct = totalPcs > 0 ? ((Number(r.total_pcs) / totalPcs) * 100).toFixed(1) : '0';
+                  return (
+                    <tr key={i}>
+                      <td>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ width: 10, height: 10, borderRadius: 2, background: COLORS_LOCAL[i % COLORS_LOCAL.length], flexShrink: 0, display: 'inline-block' }} />
+                          <span style={{ fontWeight: 600 }}>{String(r.product)}</span>
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>{String(r.order_count)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: '#0ea5e9' }}>{Number(r.total_pcs).toLocaleString()} pcs</td>
+                      <td style={{ textAlign: 'right', color: 'var(--text3)', fontSize: '0.82rem' }}>{pct}%</td>
+                      <td style={{ textAlign: 'right' }}>{fmt(Number(r.total_amount || 0))}</td>
+                    </tr>
+                  );
+                })}
+                {byProduct.length > 0 && (
+                  <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700, background: 'var(--bg)' }}>
+                    <td>TOTAL</td>
+                    <td style={{ textAlign: 'center' }}>{totalOrders}</td>
+                    <td style={{ textAlign: 'right', color: '#0ea5e9' }}>{totalPcs.toLocaleString()} pcs</td>
+                    <td style={{ textAlign: 'right' }}>100%</td>
+                    <td style={{ textAlign: 'right' }}>{fmt(totalAmt)}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Size breakdown */}
+      {tab === 'sizes' && (
+        <div>
+          {products.map(prod => {
+            const sizeRows = bySizes.filter(r => String(r.product) === prod);
+            const prodTotal = sizeRows.reduce((s, r) => s + Number(r.total_qty || 0), 0);
+            return (
+              <div key={prod} className="card" style={{ marginBottom: 14 }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{prod}</span>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text3)', fontWeight: 600 }}>{prodTotal.toLocaleString()} pcs total</span>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Size</th>
+                        <th style={{ textAlign: 'right' }}>Half</th>
+                        <th style={{ textAlign: 'right' }}>Full</th>
+                        <th style={{ textAlign: 'right' }}>Other</th>
+                        <th style={{ textAlign: 'right' }}>Total Pcs</th>
+                        <th style={{ textAlign: 'right' }}>Share</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sizeRows.map((r, i) => (
+                        <tr key={i}>
+                          <td style={{ fontWeight: 600 }}>{String(r.size)}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--text3)' }}>{Number(r.half_qty) || '—'}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--text3)' }}>{Number(r.full_qty) || '—'}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--text3)' }}>{Number(r.other_qty) || '—'}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: '#0ea5e9' }}>{Number(r.total_qty).toLocaleString()}</td>
+                          <td style={{ textAlign: 'right', fontSize: '0.78rem', color: 'var(--text3)' }}>
+                            {prodTotal > 0 ? ((Number(r.total_qty) / prodTotal) * 100).toFixed(1) + '%' : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                      <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700, background: 'var(--bg)' }}>
+                        <td>TOTAL</td>
+                        <td style={{ textAlign: 'right' }}>{sizeRows.reduce((s,r)=>s+Number(r.half_qty||0),0) || '—'}</td>
+                        <td style={{ textAlign: 'right' }}>{sizeRows.reduce((s,r)=>s+Number(r.full_qty||0),0) || '—'}</td>
+                        <td style={{ textAlign: 'right' }}>{sizeRows.reduce((s,r)=>s+Number(r.other_qty||0),0) || '—'}</td>
+                        <td style={{ textAlign: 'right', color: '#0ea5e9' }}>{prodTotal.toLocaleString()}</td>
+                        <td style={{ textAlign: 'right' }}>100%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
+          {bySizes.length === 0 && (
+            <div className="empty"><div className="empty-icon">📏</div><p>No size data for this period</p></div>
+          )}
+        </div>
+      )}
+
+      {/* Detail orders */}
+      {tab === 'detail' && (
+        <div className="card">
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Order #</th><th>Customer</th><th>Product</th>
+                  <th>Order Date</th><th>Delivered</th>
+                  <th style={{ textAlign: 'right' }}>Pcs</th>
+                  <th style={{ textAlign: 'right' }}>Value</th>
+                  <th>Prod. Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.length === 0 && (
+                  <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text3)', padding: 32 }}>No orders in this period</td></tr>
+                )}
+                {detail.map((r, i) => (
+                  <tr key={i}>
+                    <td style={{ fontWeight: 600, color: 'var(--red)' }}>{String(r.order_no || '—')}</td>
+                    <td>{String(r.customer_name || '—')}</td>
+                    <td style={{ color: 'var(--text2)' }}>{String(r.product || '—')}</td>
+                    <td style={{ fontSize: '0.78rem' }}>{String(r.order_date || '—')}</td>
+                    <td style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 600 }}>{String(r.delivery_date || '—')}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: '#0ea5e9' }}>{Number(r.total_qty || 0).toLocaleString()}</td>
+                    <td style={{ textAlign: 'right' }}>{fmt(Number(r.total_amount || 0))}</td>
+                    <td>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+                        background: String(r.production_status) === 'Completed' ? '#dcfce7' : '#fef9c3',
+                        color: String(r.production_status) === 'Completed' ? '#166534' : '#854d0e' }}>
+                        {String(r.production_status || '—')}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {detail.length > 0 && (
+                  <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700, background: 'var(--bg)' }}>
+                    <td colSpan={5}>TOTAL</td>
+                    <td style={{ textAlign: 'right', color: '#0ea5e9' }}>{detail.reduce((s,r)=>s+Number(r.total_qty||0),0).toLocaleString()} pcs</td>
+                    <td style={{ textAlign: 'right' }}>{fmt(detail.reduce((s,r)=>s+Number(r.total_amount||0),0))}</td>
+                    <td />
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

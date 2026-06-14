@@ -1133,6 +1133,63 @@ export default {
         const summary = await env.pandora_db.prepare(`SELECT category,ROUND(SUM(amount),2) total FROM expenses ${month?`WHERE strftime('%Y-%m',expense_date)='${month}'`:''} GROUP BY category`).all();
         return json({ data: rows.results, summary: summary.results });
       }
+      if (type === 'production-report') {
+        const from = url.searchParams.get('from');
+        const to = url.searchParams.get('to');
+        const statusFilter = url.searchParams.get('status') || 'Delivered';
+        let where = `WHERE o.status='${statusFilter}'`;
+        if (from && to) where += ` AND o.delivery_date >= '${from}' AND o.delivery_date <= '${to}'`;
+        else if (month) where += ` AND strftime('%Y-%m',o.delivery_date)='${month}'`;
+
+        // Summary by product type
+        const byProduct = await env.pandora_db.prepare(`
+          SELECT
+            COALESCE(o.product,'Unspecified') product,
+            COUNT(DISTINCT o.id) order_count,
+            SUM(o.total_qty) total_pcs,
+            SUM(o.total_amount) total_amount
+          FROM orders o
+          ${where}
+          GROUP BY COALESCE(o.product,'Unspecified')
+          ORDER BY total_pcs DESC
+        `).all();
+
+        // Size breakdown across all orders in period
+        const bySizes = await env.pandora_db.prepare(`
+          SELECT
+            os.size,
+            COALESCE(o.product,'Unspecified') product,
+            SUM(os.qty) total_qty,
+            SUM(os.half) half_qty,
+            SUM(os.full) full_qty,
+            SUM(os.other) other_qty
+          FROM order_sizes os
+          JOIN orders o ON o.id=os.order_id
+          ${where}
+          GROUP BY os.size, COALESCE(o.product,'Unspecified')
+          ORDER BY COALESCE(o.product,'Unspecified'), os.size
+        `).all();
+
+        // Detail rows
+        const detail = await env.pandora_db.prepare(`
+          SELECT
+            o.order_no, o.product, o.delivery_date, o.order_date,
+            o.total_qty, o.total_amount, o.status, o.production_status,
+            c.name customer_name
+          FROM orders o
+          LEFT JOIN customers c ON c.id=o.customer_id
+          ${where}
+          ORDER BY o.delivery_date DESC
+        `).all();
+
+        // Totals
+        const totals = await env.pandora_db.prepare(`
+          SELECT COUNT(DISTINCT o.id) total_orders, SUM(o.total_qty) total_pcs, SUM(o.total_amount) total_amount
+          FROM orders o ${where}
+        `).first<any>();
+
+        return json({ byProduct: byProduct.results, bySizes: bySizes.results, detail: detail.results, totals });
+      }
       if (type === 'profit-report') {
         const rows = await env.pandora_db.prepare(`
           SELECT m.month,
