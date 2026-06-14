@@ -11,3 +11,4 @@ worker/public/
 _*.png
 .env.cf
 .env.worker
+.env.deploy

@@ -130,7 +130,7 @@ export default function Dashboard() {
         </div>
 
         {/* Charts row 1 — Revenue vs Expenses bar */}
-        <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card" style={{ marginBottom: 16, borderTop: "3px solid #4E6FFF" }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
             <div className="card-title" style={{ marginBottom: 0 }}>Revenue vs Expenses — {thisMonthLabel}</div>
             <div style={{ display: 'flex', gap: 16, fontSize: '0.75rem', color: 'var(--text3)' }}>
@@ -158,15 +158,15 @@ export default function Dashboard() {
 
         {/* Charts row 2 — pie + top customers + top performers + recent orders */}
         <div className="charts-grid">
-          <div className="card">
+          <div className="card" style={{ borderTop: "3px solid #C0001A" }}>
             <div className="card-title">Orders by Status</div>
             {orderStatusDist.length === 0
               ? <div className="empty"><div className="empty-icon">📋</div><p>No orders yet</p></div>
               : (
-                <ResponsiveContainer width="100%" height={200}>
+                <ResponsiveContainer width="100%" height={220}>
                   <PieChart>
-                    <Pie data={orderStatusDist} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={75}
-                      label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false} fontSize={10}>
+                    <Pie data={orderStatusDist} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={60}
+                      label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={true} fontSize={9}>
                       {orderStatusDist.map((_: unknown, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                     </Pie>
                     <Tooltip />
@@ -174,7 +174,7 @@ export default function Dashboard() {
                 </ResponsiveContainer>
               )}
           </div>
-          <div className="card">
+          <div className="card" style={{ borderTop: "3px solid #FF9F43" }}>
             <div className="card-title">Top Customers by Revenue</div>
             {topCustomers.length === 0
               ? <div className="empty"><div className="empty-icon">👥</div><p>No customer data yet</p></div>
@@ -191,7 +191,7 @@ export default function Dashboard() {
           </div>
 
           {/* Top Performers — moved here, before Recent Orders */}
-          <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+          <div className="card" style={{ display: "flex", flexDirection: "column", borderTop: "3px solid #6A1FA0" }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
               <div style={{ background: '#6A1FA015', borderRadius: 8, padding: 6, color: '#6A1FA0', display: 'flex' }}>
                 <Trophy size={16} />
@@ -223,7 +223,7 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div className="card">
+          <div className="card" style={{ borderTop: "3px solid #4BC0C0" }}>
             <div className="card-title">Recent Orders</div>
             <div className="table-wrap">
               <table>
@@ -250,8 +250,8 @@ export default function Dashboard() {
 
         {/* Bottom row — upcoming deliveries full width */}
         <div style={{ marginTop: 16 }}>
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div className="card" style={{ borderTop: "3px solid #2E7D32" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'center', marginBottom: 12 }}>
               <div className="card-title" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <CalendarClock size={16} style={{ color: 'var(--red)' }} />
                 Upcoming Deliveries (Next 7 Days)
@@ -352,7 +352,7 @@ function KpiCard({ icon, gif, color, label, value, sub, highlight }: {
   icon?: React.ReactNode; gif?: string; color: string; label: string; value: string; sub: string; highlight?: boolean;
 }) {
   return (
-    <div className="kpi-card" style={highlight ? { borderLeft: `3px solid ${color}`, background: `${color}06` } : {}}>
+    <div className="kpi-card" style={highlight ? { borderTop: `3px solid ${color}`, borderLeft: `3px solid ${color}`, background: '#ffffff' } : { borderTop: `3px solid ${color}` }}>
       <div className="kpi-icon" style={{ background: `${color}15`, color, overflow: 'hidden', padding: gif ? 0 : undefined }}>
         {gif
           ? <img src={gif} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
