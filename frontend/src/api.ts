@@ -1,4 +1,4 @@
-const BASE = 'https://pandoralk.pandoralk.workers.dev';
+const BASE = 'https://pixal.pandoralk.workers.dev';
 
 async function req(path: string, method = 'GET', body?: object) {
   const res = await fetch(`${BASE}${path}`, {
