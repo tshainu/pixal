@@ -180,7 +180,17 @@ function printReceipt(sale: any, items: any[], settings?: Record<string, string>
     document.getElementById('__receipt_print__')?.remove();
     window.onafterprint = null;
   };
-  window.print();
+  if (headerImgUrl) {
+    const img = node.querySelector('img') as HTMLImageElement | null;
+    if (img && !img.complete) {
+      img.onload = () => window.print();
+      img.onerror = () => window.print();
+    } else {
+      window.print();
+    }
+  } else {
+    window.print();
+  }
 }
 
 function POSTab() {
