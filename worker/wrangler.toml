@@ -13,3 +13,6 @@ run_worker_first = true
 binding = "pandora_db"
 database_name = "pandora-db"
 database_id = "5aad9c90-e8fe-445c-a198-ca93059612ea"
+
+[triggers]
+crons = ["0 1 * * *"]

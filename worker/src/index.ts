@@ -965,7 +965,7 @@ export default {
         await env.pandora_db.prepare(`UPDATE company_settings SET name=?,address=?,phone=?,email=?,order_prefix=?,invoice_prefix=?,quotation_prefix=?,order_seq=?,invoice_seq=?,quotation_seq=? WHERE id=1`)
           .bind(b.name,b.address||null,b.phone||null,b.email||null,b.order_prefix||'ORD',b.invoice_prefix||'INV',b.quotation_prefix||'QUO',Number(b.order_seq)||1,Number(b.invoice_seq)||1,Number(b.quotation_seq)||1).run();
         // Extra settings → app_settings KV
-        const extraKeys = ['currency_symbol','date_format','print_paper_size','print_show_images','print_show_elements','print_show_sizes','cal_capacity','default_order_status','wa_enabled','wa_country_code','wa_btn_position','wa_auto_confirmed','wa_auto_ready','wa_tpl_order_confirmation','wa_tpl_order_ready','wa_tpl_order_delivered','wa_tpl_payment_reminder'];
+        const extraKeys = ['currency_symbol','date_format','print_paper_size','print_show_images','print_show_elements','print_show_sizes','cal_capacity','default_order_status','wa_enabled','wa_country_code','wa_btn_position','wa_auto_confirmed','wa_auto_ready','wa_tpl_order_confirmation','wa_tpl_order_ready','wa_tpl_order_delivered','wa_tpl_payment_reminder','wa_reminder_enabled','wa_reminder_duration_days','wa_reminder_interval_days'];
         for (const k of extraKeys) {
           if (b[k] !== undefined) {
             await env.pandora_db.prepare(`INSERT INTO app_settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).bind(k, String(b[k])).run();
@@ -1208,6 +1208,31 @@ export default {
       }
     }
 
+    // ─── PAYMENT REMINDERS ───────────────────────────────────────────────────
+    if (method === 'GET' && path === '/payment-reminders/due') {
+      // Self-migrate
+      await env.pandora_db.prepare(`CREATE TABLE IF NOT EXISTS payment_reminders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sale_id INTEGER UNIQUE,
+        customer_id INTEGER,
+        invoice_no TEXT,
+        due_amount REAL,
+        last_sent TEXT,
+        send_count INTEGER DEFAULT 0,
+        active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (date('now'))
+      )`).run();
+
+      const rows = await env.pandora_db.prepare(`
+        SELECT pr.*, c.name customer_name, c.phone customer_phone
+        FROM payment_reminders pr
+        LEFT JOIN customers c ON c.id = pr.customer_id
+        WHERE pr.active = 1
+        ORDER BY pr.created_at DESC
+      `).all<any>();
+      return json({ reminders: rows.results || [] });
+    }
+
     // ─── STATIC ASSETS / SPA ─────────────────────────────────────────────────
     // Known API prefixes return JSON 404; everything else serves the frontend.
     const API_PREFIXES = [
@@ -1216,11 +1241,86 @@ export default {
       '/sales', '/sale-items', '/quotations', '/quotation-items', '/orders',
       '/staff', '/teams', '/departments', '/employees', '/evaluations',
       '/expenses', '/expense-categories', '/reports', '/settings', '/company-settings', '/price-groups',
-      '/addon-items', '/order-',
+      '/addon-items', '/order-', '/payment-reminders',
     ];
     if (API_PREFIXES.some(p => path === p || path.startsWith(p + '/') || path.startsWith(p))) {
       return err('Not found', 404);
     }
     return env.ASSETS.fetch(request);
+  },
+
+  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+    // Self-migrate payment_reminders table
+    await env.pandora_db.prepare(`CREATE TABLE IF NOT EXISTS payment_reminders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sale_id INTEGER UNIQUE,
+      customer_id INTEGER,
+      invoice_no TEXT,
+      due_amount REAL,
+      last_sent TEXT,
+      send_count INTEGER DEFAULT 0,
+      active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (date('now'))
+    )`).run();
+
+    // Load reminder settings
+    const settingsRows = await env.pandora_db.prepare(
+      `SELECT key, value FROM app_settings WHERE key IN ('wa_reminder_enabled','wa_reminder_duration_days','wa_reminder_interval_days')`
+    ).all<any>();
+    const settings: Record<string, string> = {};
+    for (const r of (settingsRows.results || [])) settings[r.key] = r.value;
+
+    if (settings['wa_reminder_enabled'] !== 'true') return;
+
+    const durationDays = parseInt(settings['wa_reminder_duration_days'] || '60', 10);
+    const intervalDays = parseInt(settings['wa_reminder_interval_days'] || '7', 10);
+
+    // Deactivate reminders for paid sales
+    await env.pandora_db.prepare(`
+      UPDATE payment_reminders SET active = 0
+      WHERE sale_id IN (
+        SELECT id FROM sales WHERE payment_status = 'Paid'
+      ) AND active = 1
+    `).run();
+
+    // Find Delivered orders with Due/Partial payment within duration window
+    const due = await env.pandora_db.prepare(`
+      SELECT s.id sale_id, s.customer_id, s.invoice_no,
+             (s.total_amount - COALESCE(s.paid_amount,0)) due_amount,
+             o.delivery_date
+      FROM sales s
+      JOIN orders o ON o.id = s.order_id
+      WHERE s.payment_status IN ('Due','Partial')
+        AND o.status = 'Delivered'
+        AND o.delivery_date IS NOT NULL
+        AND julianday('now') - julianday(o.delivery_date) <= ?
+        AND julianday('now') - julianday(o.delivery_date) >= 0
+    `).bind(durationDays).all<any>();
+
+    for (const row of (due.results || [])) {
+      // Check existing reminder
+      const existing = await env.pandora_db.prepare(
+        `SELECT id, last_sent, active FROM payment_reminders WHERE sale_id = ?`
+      ).bind(row.sale_id).first<any>();
+
+      if (existing) {
+        // Already deactivated → skip
+        if (!existing.active) continue;
+        // Check interval
+        if (existing.last_sent) {
+          const daysSinceLast = Math.floor((Date.now() - new Date(existing.last_sent).getTime()) / 86400000);
+          if (daysSinceLast < intervalDays) continue;
+        }
+        // Update: mark due (reset last_sent to today so frontend knows it's fresh)
+        await env.pandora_db.prepare(
+          `UPDATE payment_reminders SET due_amount=?, last_sent=date('now'), send_count=send_count+1, active=1 WHERE sale_id=?`
+        ).bind(row.due_amount, row.sale_id).run();
+      } else {
+        // Insert new reminder
+        await env.pandora_db.prepare(
+          `INSERT INTO payment_reminders (sale_id, customer_id, invoice_no, due_amount, active) VALUES (?,?,?,?,1)`
+        ).bind(row.sale_id, row.customer_id, row.invoice_no, row.due_amount).run();
+      }
+    }
   },
 };

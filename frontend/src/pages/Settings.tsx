@@ -273,6 +273,134 @@ function MessagesTab({ form, set, bool }: {
         {Object.keys(VARS).map(k => (
           <TemplateEditor key={k} tkey={k} form={form} set={set} />
         ))}
+
+        {/* Auto Payment Reminder Config — shown only when WhatsApp is enabled */}
+        {bool('wa_enabled', false) && (
+          <div style={{
+            marginTop: 8,
+            border: '1px solid #C7D2FE',
+            borderRadius: 10,
+            background: '#F5F3FF',
+            overflow: 'hidden',
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '12px 16px',
+              background: '#EDE9FE',
+              borderBottom: '1px solid #C7D2FE',
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: 26, height: 26, borderRadius: 7, background: '#7C3AED', color: '#fff', fontSize: 13,
+              }}>⏰</span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#4C1D95' }}>Auto Payment Reminders</div>
+                <div style={{ fontSize: '0.72rem', color: '#6D28D9', marginTop: 1 }}>
+                  Automatically flag overdue invoices for WhatsApp follow-up
+                </div>
+              </div>
+            </div>
+
+            <div style={{ padding: '16px' }}>
+              {/* How it works info */}
+              <div style={{
+                background: '#EDE9FE', border: '1px solid #C4B5FD', borderRadius: 8,
+                padding: '10px 14px', fontSize: '0.76rem', color: '#5B21B6',
+                marginBottom: 16, display: 'flex', gap: 8, lineHeight: 1.5,
+              }}>
+                <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>
+                  When enabled, the system tracks Delivered orders with <strong>Due</strong> or <strong>Partial</strong> payment.
+                  Overdue reminders appear in the Orders page with a <strong>"Send Reminder"</strong> WhatsApp button.
+                  Reminders auto-stop when payment is marked <strong>Paid</strong>.
+                </span>
+              </div>
+
+              {/* Enable toggle */}
+              <Toggle
+                label="Enable Auto Payment Reminders"
+                desc="Track unpaid Delivered orders and prompt WhatsApp reminders"
+                checked={bool('wa_reminder_enabled', false)}
+                onChange={v => set('wa_reminder_enabled', String(v))}
+              />
+
+              {bool('wa_reminder_enabled', false) && (
+                <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                  {/* Duration */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+                    <div className="form-group" style={{ margin: 0, flex: '1 1 200px' }}>
+                      <label style={{ fontSize: '0.82rem', fontWeight: 600 }}>
+                        Send reminders for up to
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                        <input
+                          className="form-control"
+                          type="number" min={1} max={365}
+                          style={{ width: 90 }}
+                          value={form.wa_reminder_duration_days || '60'}
+                          onChange={e => set('wa_reminder_duration_days', e.target.value)}
+                        />
+                        <span style={{ fontSize: '0.82rem', color: 'var(--text2)', whiteSpace: 'nowrap' }}>days after delivery</span>
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text3)', marginTop: 4 }}>
+                        Stop reminders after this many days regardless of payment status
+                      </div>
+                    </div>
+
+                    {/* Interval */}
+                    <div className="form-group" style={{ margin: 0, flex: '1 1 200px' }}>
+                      <label style={{ fontSize: '0.82rem', fontWeight: 600 }}>
+                        Remind every
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                        <input
+                          className="form-control"
+                          type="number" min={1} max={90}
+                          style={{ width: 90 }}
+                          value={form.wa_reminder_interval_days || '7'}
+                          onChange={e => set('wa_reminder_interval_days', e.target.value)}
+                        />
+                        <span style={{ fontSize: '0.82rem', color: 'var(--text2)', whiteSpace: 'nowrap' }}>days</span>
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text3)', marginTop: 4 }}>
+                        Minimum gap between reminder prompts for the same invoice
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Summary pill */}
+                  <div style={{
+                    background: '#fff', border: '1px solid #DDD6FE', borderRadius: 8,
+                    padding: '10px 14px', fontSize: '0.78rem', color: '#5B21B6',
+                    display: 'flex', alignItems: 'center', gap: 8,
+                  }}>
+                    <span style={{ fontSize: 16 }}>📋</span>
+                    <span>
+                      Reminders will appear every <strong>{form.wa_reminder_interval_days || 7} days</strong> for up to{' '}
+                      <strong>{form.wa_reminder_duration_days || 60} days</strong> after delivery.
+                      Auto-stops when payment is received.
+                    </span>
+                  </div>
+
+                  {/* Auto-stop note */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    fontSize: '0.75rem', color: '#059669',
+                    background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 7, padding: '8px 12px',
+                  }}>
+                    <span>✅</span>
+                    <span>
+                      <strong>Auto-stops</strong> when the invoice payment status is set to <strong>Paid</strong>
+                    </span>
+                  </div>
+
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
