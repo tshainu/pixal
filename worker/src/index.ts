@@ -966,7 +966,7 @@ export default {
         await env.pandora_db.prepare(`UPDATE company_settings SET name=?,address=?,phone=?,email=?,order_prefix=?,invoice_prefix=?,quotation_prefix=?,order_seq=?,invoice_seq=?,quotation_seq=? WHERE id=1`)
           .bind(b.name,b.address||null,b.phone||null,b.email||null,b.order_prefix||'ORD',b.invoice_prefix||'INV',b.quotation_prefix||'QUO',Number(b.order_seq)||1,Number(b.invoice_seq)||1,Number(b.quotation_seq)||1).run();
         // Extra settings → app_settings KV
-        const extraKeys = ['currency_symbol','date_format','print_paper_size','print_show_images','print_show_elements','print_show_sizes','cal_capacity','default_order_status','wa_enabled','wa_country_code','wa_btn_position','wa_auto_confirmed','wa_auto_ready','wa_tpl_order_confirmation','wa_tpl_order_ready','wa_tpl_order_delivered','wa_tpl_payment_reminder','wa_reminder_enabled','wa_reminder_duration_days','wa_reminder_interval_days'];
+        const extraKeys = ['currency_symbol','date_format','print_paper_size','print_show_images','print_show_elements','print_show_sizes','cal_capacity','default_order_status','wa_enabled','wa_country_code','wa_btn_position','wa_auto_confirmed','wa_auto_ready','wa_tpl_order_confirmation','wa_tpl_order_ready','wa_tpl_order_delivered','wa_tpl_payment_reminder','wa_reminder_enabled','wa_reminder_duration_days','wa_reminder_interval_days','wa_api_enabled','wa_api_phone_number_id','wa_api_access_token','wa_api_version'];
         for (const k of extraKeys) {
           if (b[k] !== undefined) {
             await env.pandora_db.prepare(`INSERT INTO app_settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).bind(k, String(b[k])).run();
@@ -1206,6 +1206,65 @@ export default {
         return json({ data: rows.results });
       }
       return err('Unknown report type', 404);
+    }
+
+    // ─── WHATSAPP CLOUD API SEND ──────────────────────────────────────────────
+    if (method === 'POST' && path === '/wa/send') {
+      const b = await request.json() as any;
+      // Load API credentials from settings
+      const getSetting = async (key: string) => {
+        const row = await env.pandora_db.prepare('SELECT value FROM app_settings WHERE key=?').bind(key).first<any>();
+        return row?.value || '';
+      };
+      const apiEnabled = await getSetting('wa_api_enabled');
+      if (apiEnabled !== 'true') return err('WhatsApp API not enabled', 400);
+      const phoneNumberId = await getSetting('wa_api_phone_number_id');
+      const accessToken   = await getSetting('wa_api_access_token');
+      const apiVersion    = await getSetting('wa_api_version') || 'v19.0';
+      if (!phoneNumberId || !accessToken) return err('WhatsApp API credentials not configured', 400);
+
+      const { to, message, template_name, template_lang, template_params } = b;
+      if (!to) return err('Missing recipient phone number', 400);
+
+      let payload: any;
+      if (template_name) {
+        // Template message (for reminders / outbound)
+        payload = {
+          messaging_product: 'whatsapp',
+          to,
+          type: 'template',
+          template: {
+            name: template_name,
+            language: { code: template_lang || 'en' },
+            components: template_params ? [{
+              type: 'body',
+              parameters: (template_params as string[]).map((t: string) => ({ type: 'text', text: t })),
+            }] : [],
+          },
+        };
+      } else if (message) {
+        // Free-form text (within 24hr window)
+        payload = {
+          messaging_product: 'whatsapp',
+          to,
+          type: 'text',
+          text: { body: message },
+        };
+      } else {
+        return err('Provide either message or template_name', 400);
+      }
+
+      const res = await fetch(`https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json() as any;
+      if (!res.ok) return json({ ok: false, error: data }, res.status);
+      return json({ ok: true, data });
     }
 
     // ─── PRICE GROUPS ────────────────────────────────────────────────────────

@@ -263,6 +263,91 @@ function MessagesTab({ form, set, bool }: {
         )}
       </div>
 
+      {/* WhatsApp Cloud API */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 8, background: '#1877F2', color: '#fff', fontSize: 13 }}>API</span>
+          WhatsApp Cloud API
+        </div>
+
+        <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '10px 14px', fontSize: '0.78rem', color: '#1E40AF', marginBottom: 16, display: 'flex', gap: 8 }}>
+          <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>
+            Connect Meta WhatsApp Cloud API to send messages programmatically — no manual link opening.
+            Requires a <strong>Meta Business Account</strong> with WhatsApp API access.{' '}
+            <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" rel="noreferrer" style={{ color: '#1D4ED8', fontWeight: 600 }}>Setup guide →</a>
+          </span>
+        </div>
+
+        <Toggle
+          label="Enable WhatsApp Cloud API"
+          desc="Use Meta API to send messages instead of wa.me links"
+          checked={bool('wa_api_enabled', false)}
+          onChange={v => set('wa_api_enabled', String(v))}
+        />
+
+        {bool('wa_api_enabled', false) && (
+          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label>Phone Number ID <span style={{ color: 'var(--red)' }}>*</span></label>
+              <input
+                className="form-control"
+                placeholder="e.g. 123456789012345"
+                value={form.wa_api_phone_number_id || ''}
+                onChange={e => set('wa_api_phone_number_id', e.target.value.trim())}
+              />
+              <div style={{ fontSize: '0.72rem', color: 'var(--text3)', marginTop: 4 }}>
+                Found in Meta Developer Console → WhatsApp → API Setup → Phone Number ID
+              </div>
+            </div>
+
+            <div className="form-group" style={{ margin: 0 }}>
+              <label>Access Token <span style={{ color: 'var(--red)' }}>*</span></label>
+              <input
+                className="form-control"
+                type="password"
+                placeholder="EAAxxxxxxxxxx..."
+                value={form.wa_api_access_token || ''}
+                onChange={e => set('wa_api_access_token', e.target.value.trim())}
+              />
+              <div style={{ fontSize: '0.72rem', color: 'var(--text3)', marginTop: 4 }}>
+                Permanent system token from Meta Business → System Users. Do not use temporary tokens.
+              </div>
+            </div>
+
+            <div className="form-group" style={{ margin: 0 }}>
+              <label>API Version</label>
+              <input
+                className="form-control"
+                placeholder="v19.0"
+                value={form.wa_api_version || 'v19.0'}
+                onChange={e => set('wa_api_version', e.target.value.trim())}
+                style={{ maxWidth: 120 }}
+              />
+              <div style={{ fontSize: '0.72rem', color: 'var(--text3)', marginTop: 4 }}>
+                Default: v19.0. Check Meta docs for latest stable version.
+              </div>
+            </div>
+
+            <div style={{ background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 8, padding: '10px 14px', fontSize: '0.76rem', color: '#166534', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>✅ When API is enabled:</div>
+              <div>• <strong>Order Confirmed</strong> → free-form message sent automatically via API</div>
+              <div>• <strong>Order Ready</strong> → free-form message sent automatically via API</div>
+              <div>• <strong>Payment Reminders</strong> → use approved WhatsApp templates</div>
+              <div>• Manual send buttons still available on order detail</div>
+            </div>
+
+            <div style={{ background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 8, padding: '10px 14px', fontSize: '0.75rem', color: '#92400E', display: 'flex', gap: 8 }}>
+              <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>
+                Free-form messages only work within a <strong>24-hour customer service window</strong> (customer messaged you first).
+                For outbound reminders, use approved <strong>WhatsApp Template messages</strong> from your Meta Business account.
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Message Templates */}
       <div className="card">
         <div className="card-title">Message Templates</div>

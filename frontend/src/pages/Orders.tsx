@@ -238,15 +238,19 @@ const DEFAULT_WA_TEMPLATES: Record<string, string> = {
   order_ready: `Hello {{customer_name}},\n\nGreat news! 🎊 Your order is ready for pickup/delivery.\n\n*Order No:* {{order_no}}\n*Qty:* {{total_qty}} pcs\n\nPlease contact us to arrange delivery.\n📞 {{company_phone}}\n\n{{company_name}}`,
 };
 
-function buildWALink(order: Order, templateKey: string, settings: Record<string, string>): string | null {
+
+function buildPhone(order: Order, settings: Record<string, string>): string | null {
   const rawPhone = order.customer_phone || order.customer_mobile || '';
   if (!rawPhone) return null;
   const countryCode = settings.wa_country_code || '94';
   const digits = rawPhone.replace(/\D/g, '');
-  const phone = digits.startsWith('0') ? countryCode + digits.slice(1) : digits.startsWith(countryCode) ? digits : countryCode + digits;
+  return digits.startsWith('0') ? countryCode + digits.slice(1) : digits.startsWith(countryCode) ? digits : countryCode + digits;
+}
+
+function buildMessage(order: Order, templateKey: string, settings: Record<string, string>): string {
   const tplKey = `wa_tpl_${templateKey}`;
-  const template = settings[tplKey] || DEFAULT_WA_TEMPLATES[templateKey] || '';
-  const msg = template
+  const template = settings[tplKey] || DEFAULT_WA_TEMPLATES[templateKey as keyof typeof DEFAULT_WA_TEMPLATES] || '';
+  return template
     .replace(/{{customer_name}}/g, order.customer_name || '')
     .replace(/{{order_no}}/g, order.order_no || '')
     .replace(/{{order_date}}/g, order.order_date || '')
@@ -255,19 +259,29 @@ function buildWALink(order: Order, templateKey: string, settings: Record<string,
     .replace(/{{total_amount}}/g, String(order.total_amount || ''))
     .replace(/{{company_name}}/g, settings.name || '')
     .replace(/{{company_phone}}/g, settings.phone || '');
-  return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
 }
 
-function triggerWAIfEnabled(order: Order, newStatus: string, settings: Record<string, string>) {
+async function triggerWAIfEnabled(order: Order, newStatus: string, settings: Record<string, string>) {
   if (settings.wa_enabled !== 'true') return;
-  if (newStatus === 'Confirmed' && settings.wa_auto_confirmed === 'true') {
-    const link = buildWALink(order, 'order_confirmation', settings);
-    if (link) window.open(link, '_blank');
-  }
-  if (newStatus === 'Ready' && settings.wa_auto_ready === 'true') {
-    const link = buildWALink(order, 'order_ready', settings);
-    if (link) window.open(link, '_blank');
-  }
+
+  const useApi = settings.wa_api_enabled === 'true';
+
+  const send = async (templateKey: string) => {
+    const phone = buildPhone(order, settings);
+    if (!phone) return;
+    if (useApi) {
+      // Send via Meta Cloud API (free-form — order updates within session window)
+      const message = buildMessage(order, templateKey, settings);
+      try { await api.sendWA({ to: phone, message }); } catch { /* silent */ }
+    } else {
+      // Fallback: open wa.me link
+      const msg = buildMessage(order, templateKey, settings);
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+    }
+  };
+
+  if (newStatus === 'Confirmed' && settings.wa_auto_confirmed === 'true') await send('order_confirmation');
+  if (newStatus === 'Ready'     && settings.wa_auto_ready === 'true')      await send('order_ready');
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────

@@ -232,4 +232,7 @@ export const api = {
   createAddonItem: (data: object) => req('/addon-items', 'POST', data),
   updateAddonItem: (id: number, data: object) => req(`/addon-items/${id}`, 'PUT', data),
   deleteAddonItem: (id: number) => req(`/addon-items/${id}`, 'DELETE'),
+
+  sendWA: (payload: { to: string; message?: string; template_name?: string; template_lang?: string; template_params?: string[] }) =>
+    req('/wa/send', 'POST', payload),
 };
